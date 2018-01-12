@@ -1619,7 +1619,13 @@ namespace rs2
                 (!kvp.second.dev || (!kvp.second.dev->is_paused() && !kvp.second.dev->streaming)))
                 streams_to_remove.push_back(kvp.first);
         }
+		int counter = 0;
         for (auto&& i : streams_to_remove) {
+			if (streams_to_remove.size() == 1)
+				break;
+			char temp[50];
+			sprintf(temp, "stream to remove = %d, index = %d", i, counter++);
+			log(RS2_LOG_SEVERITY_DEBUG, temp);
             streams.erase(i);
         }
     }

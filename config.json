@@ -1,13 +1,11 @@
 {
     "config":{
-	    "FillRatePassPercentageC": 97.9,
-		"FillRatePassPercentageUR": 97.6,
-		"FillRatePassPercentageBR": 97.2,
-	    "MeanPassPercentage": 2,
+	    "FillRatePassPercentage": 97.9,
+		"AccuracyPassPercentage": 2,
 	    "TestDistance": 1160,
-		"RMSPassRate": 0.15,
-	    "CheckColor": "False",
 		"PostProcessing": "True",
-		"EdgeOffset": 30
+		"RMSFittingPlanePassRate": 0.15,
+		"RMSSubpixelPassRate": 0.15,
+		"ROIPercentage": 40
 	}
 }
