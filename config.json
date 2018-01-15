@@ -4,7 +4,7 @@
 		"AccuracyPassPercentage": 2,
 	    "TestDistance": 1160,
 		"PostProcessing": "True",
-		"RMSFittingPlanePassRate": 0.15,
+		"RMSFittingPlanePassRate": 2,
 		"RMSSubpixelPassRate": 0.15,
 		"ROIPercentage": 40
 	}

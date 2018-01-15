@@ -667,6 +667,7 @@ namespace rs2
         void gc_streams();
 
         std::map<int, stream_model> streams;
+		bool touch3dArcCam = false;
         bool fullscreen = false;
         stream_model* selected_stream = nullptr;
 
