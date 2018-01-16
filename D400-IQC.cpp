@@ -39,18 +39,14 @@
 #pragma comment(lib, "opengl32.lib")
 
 using namespace rs2;
-//using namespace rs400;
 using namespace cv;
 using namespace nlohmann;
 
 #define TIME_TO_CAPTURE 3
 #define TESTING_TIME	6
-//#define TESTING_TIME	8
 #define MAJOR_VERSION 1
 #define MINOR_VERSION 0
-#define PATCH_VERSION 9
-
-#define MAX_ANGLE 10
+#define PATCH_VERSION 10
 
 bool gStartCapture = false, gStartTesting = false, gJoinTrigger = false;
 region_of_interest gRoi = { -1, -1, -1, -1 };
@@ -89,8 +85,6 @@ void testingThreadFun() {
 		{
 			std::this_thread::sleep_for(std::chrono::seconds(TIME_TO_CAPTURE));
 			gStartCapture = true;
-			//std::this_thread::sleep_for(std::chrono::seconds(TESTING_TIME - TIME_TO_CAPTURE));
-			//gStartTesting = false;
 		}
 		else if (res == WAIT_OBJECT_0 + 1)
 		{
@@ -128,12 +122,6 @@ void* testingThreadFun(void* context){
 }
 #endif
 
-enum DEV_TYPE {
-	RS410,
-	RS430,
-	COUNT
-};
-
 struct test_result {
 	enum BLOCK{
 		C,
@@ -146,22 +134,11 @@ struct test_result {
 	float accuracy;
 	float angle;
 	std::string serialNumStr;
-	//float meanA;
-	//float stdA;
-	//float fillRate[BLOCK::COUNT];
-	//float mean[BLOCK::COUNT];
-	//float std[BLOCK::COUNT];
 	std::string csvFileName;
 	float rmsSubpixel;
 	float rmsFittingPlane;
 
 	void clear() {
-		/*for (int i = 0; i < BLOCK::COUNT; i++)
-		{
-			fillRate[i] = 0;
-			mean[i] = 0;
-			std[i] = 0;
-		}*/
 		csvFileName = "";
 		serialNumStr = "";
 		fillRate = 0.f;
@@ -173,33 +150,27 @@ struct test_result {
 };
 
 struct IQC_config {
-	//float fillRatePassP[3];
 	float fillRatePassP;
 	float accuracyPassP;
 	int ROIPercent;
-	//int meanPassP;
 	int distance;
-	//int minDist;
-	//int maxDist;
-	//int edgeOffset;
 	float rmsSubpixelPassRate;
 	float rmsFittingPlanePassRate;
-	//bool checkColor;
 	bool enablePostProcessing;
+	int maxAngle;
 }gConfig;
 
 struct stream_format_idx {
 	int depthSIdx = -1;
 	int infra1SIdx = -1;
 	int infra2SIdx = -1;
-	int infra1ColorFIdx = -1;
 	int infra1Y8FIdx = -1;
 	int infra2Y8FIdx = -1;
 	int rgbSIdx = -1;
 	int rgbColorFIdx = -1;
 
 	void reset() {
-		depthSIdx = -1; infra1SIdx = -1; infra2SIdx = -1; infra1ColorFIdx = -1; infra1Y8FIdx = -1; infra2Y8FIdx = -1;  rgbSIdx = -1; rgbColorFIdx = -1;
+		depthSIdx = -1; infra1SIdx = -1; infra2SIdx = -1; infra1Y8FIdx = -1; infra2Y8FIdx = -1;  rgbSIdx = -1; rgbColorFIdx = -1;
 	}
 };
 
@@ -224,9 +195,6 @@ struct snapshot_metrics
 	rs2::region_of_interest roi;
 
 	float distance;
-	/*float angle;
-	float angle_x;
-	float angle_y;*/
 	angles angles;
 
 	plane p;
@@ -241,23 +209,26 @@ bool readConfig() {
 		json j;
 		i >> j;
 
-		//gConfig.fillRatePassP[test_result::BLOCK::C] = j["config"]["FillRatePassPercentageC"].get<float>();
-		//gConfig.fillRatePassP[test_result::BLOCK::UR] = j["config"]["FillRatePassPercentageUR"].get<float>();
-		//gConfig.fillRatePassP[test_result::BLOCK::BR] = j["config"]["FillRatePassPercentageBR"].get<float>();
 		gConfig.fillRatePassP = j["config"]["FillRatePassPercentage"].get<float>();
 		gConfig.accuracyPassP = j["config"]["AccuracyPassPercentage"].get<float>();
-		//gConfig.meanPassP = j["config"]["MeanPassPercentage"].get<int>();
 		gConfig.distance = j["config"]["TestDistance"].get<int>();
-		//gConfig.checkColor = (j["config"]["CheckColor"].get<std::string>() == "False" ? false : true);
 		gConfig.enablePostProcessing = (j["config"]["PostProcessing"].get<std::string>() == "False" ? false : true);
-		//gConfig.edgeOffset = j["config"]["EdgeOffset"].get<int>();
 		gConfig.rmsFittingPlanePassRate = j["config"]["RMSFittingPlanePassRate"].get<float>();
 		gConfig.rmsSubpixelPassRate = j["config"]["RMSSubpixelPassRate"].get<float>();
 		gConfig.ROIPercent = j["config"]["ROIPercentage"].get<int>();
+		gConfig.maxAngle = j["config"]["MaxAngle"].get<int>();
 	}
-	catch(std::ifstream::failure e){
+	catch (std::ifstream::failure e) {
 		return false;
 	}
+	catch (std::invalid_argument e)
+	{
+		return false;
+	}
+	catch (std::domain_error e)
+	{
+		return false;
+    }
 
 	return true;
 }
@@ -268,8 +239,6 @@ void drawTestPicture(video_frame&& vframe, test_result* result)
 	Mat color24(Size(actual_w, actual_h), CV_8UC3, (void*)vframe.get_data(), Mat::AUTO_STEP);
 	char text[100];
 	sprintf(text, "Accuracy = %.2f, FillRate = %.2f, subpixelRMS = %.2f, fittingRMS = %.2f", result->accuracy, result->fillRate, result->rmsSubpixel, result->rmsFittingPlane);
-	//putText(color24, text, Point(_rect.x, _rect.y), CV_FONT_HERSHEY_PLAIN, 1, Scalar(255, 255, 255));
-	//rectangle(color24, Point(_rect.x, _rect.y), Point(_rect.x + _rect.w, _rect.y + _rect.h), Scalar(255, 255, 255), 1);
 	putText(color24, text, Point(gRoi.min_x, gRoi.min_y), CV_FONT_HERSHEY_PLAIN, 1, Scalar(255, 255, 255));
 	rectangle(color24, Point(gRoi.min_x, gRoi.min_y), Point(gRoi.max_x, gRoi.max_y), Scalar(255, 255, 255), 1);
 }
@@ -277,46 +246,11 @@ void drawTestPicture(video_frame&& vframe, test_result* result)
 void saveResult(test_result* result)
 {
 	std::ostringstream fileStream;
-	//temporily comment out, waiting for more mature RMS calculation.
-	//fileStream << "Center, Mean," << result->mean[test_result::C] << ",FillRate," << result->fillRate[test_result::C] << ",Std," << result->std[test_result::C] << ",RMS," << result->rms << "\n";  
-	fileStream << "Serial," << result->serialNumStr << ",Angle," << result->angle << ",Accuracy," << result->accuracy << ",FillRate," << result->fillRate << ",subpixel RMS," << result->rmsSubpixel << ",fitting plane RMS," << result->rmsFittingPlane << "\n";
+	fileStream << "Serial," << result->serialNumStr << ",Angle," << result->angle << ",Accuracy," << result->accuracy << ",FillRate," << result->fillRate << ",fitting plane RMS," << result->rmsFittingPlane << "\n";
 	std::ofstream save_file(result->csvFileName, std::ofstream::binary);
 	save_file.write((char*)fileStream.str().data(), fileStream.str().size());
 	save_file.close();
 }
-
-/*void drawTestPicture(video_frame&& vframe, rect _rect, test_result* result)
-{
-	int actual_w = vframe.get_width(), actual_h = vframe.get_height();
-	Mat color24(Size(actual_w, actual_h), CV_8UC3, (void*)vframe.get_data(), Mat::AUTO_STEP);
-	char text[100];
-	sprintf(text, "mean = %.2f, std = %.2f, fillrate = %.3f", result->mean[test_result::C], result->std[test_result::C], result->fillRate[test_result::C]);
-	putText(color24, text, Point(_rect.x, _rect.y), CV_FONT_HERSHEY_PLAIN, 1, Scalar(255, 255, 255));
-	rectangle(color24, Point(_rect.x, _rect.y), Point(_rect.x + _rect.w, _rect.y + _rect.h), Scalar(255, 255, 255), 1);
-
-	memset(text, 0, 100);
-	sprintf(text, "mean = %.2f, std = %.2f, fillrate = %.3f", result->mean[test_result::UR], result->std[test_result::UR], result->fillRate[test_result::UR]);
-	putText(color24, text, Point(_rect.x + _rect.w, 10), CV_FONT_HERSHEY_PLAIN, 1, Scalar(255, 255, 255));
-	rectangle(color24, Point(_rect.x + _rect.w, 0), Point(actual_w - gConfig.edgeOffset, _rect.y), Scalar(255, 255, 255), 1);
-
-	memset(text, 0, 100);
-	sprintf(text, "mean = %.2f, std = %.2f, fillrate = %.3f", result->mean[test_result::BR], result->std[test_result::BR], result->fillRate[test_result::BR]);
-	putText(color24, text, Point(_rect.x + _rect.w, _rect.y + _rect.h), CV_FONT_HERSHEY_PLAIN, 1, Scalar(255, 255, 255));
-	rectangle(color24, Point(_rect.x + _rect.w, _rect.y + _rect.h), Point(actual_w - gConfig.edgeOffset, _rect.y + (2 * _rect.h)), Scalar(255, 255, 255), 1);
-}
-
-void saveResult(test_result* result)
-{
-	std::ostringstream fileStream;
-	//temporily comment out, waiting for more mature RMS calculation.
-	//fileStream << "Center, Mean," << result->mean[test_result::C] << ",FillRate," << result->fillRate[test_result::C] << ",Std," << result->std[test_result::C] << ",RMS," << result->rms << "\n";  
-	fileStream << "Center, Mean," << result->mean[test_result::C] << ",FillRate," << result->fillRate[test_result::C] << ",Std," << result->std[test_result::C] << "\n";
-	fileStream << "Upper Right, Mean," << result->mean[test_result::UR] << ",FillRate," << result->fillRate[test_result::UR] << ",Std," << result->std[test_result::UR] << "\n";  
-	fileStream << "Center, Mean," << result->mean[test_result::BR] << ",FillRate," << result->fillRate[test_result::BR] << ",Std," << result->std[test_result::BR] << "\n"; 
-	std::ofstream save_file(result->csvFileName, std::ofstream::binary);
-	save_file.write((char*)fileStream.str().data(), fileStream.str().size());
-	save_file.close();
-}*/
 
 #ifndef _WIN32
 struct CalResultStrut{
@@ -334,97 +268,20 @@ snapshot_metrics analyze_depth_image(const uint16_t* data, int w, int h, float u
 #ifdef _WIN32
 void calResultThreadFun(frame* _frame, unsigned short* data, test_result* result, float baseline_mm, rs2_intrinsics intrin) {
 #else
-void* calResultThreadFun(void* ctx){
+void* calResultThreadFun(void* ctx) {
 	CalResultStrut* resultSet = (CalResultStrut*)ctx;
 	frame* _frame = resultSet->frame; unsigned short* data = resultSet->data; test_result* result = resultSet->result; float baseline_mm = resultSet->baseline_mm; rs2_intrinsics intrin = resultSet->intrin;
 #endif
-	//char temp[20];
 	video_frame vframe = _frame->as<video_frame>();
 	int actual_w = vframe.get_width(), actual_h = vframe.get_height();
 
-	//sprintf(temp, "before analyze image");
-	//log(RS2_LOG_SEVERITY_DEBUG, temp);
 	auto res = analyze_depth_image(data, actual_w, actual_h, 0.001, baseline_mm, &intrin);
-	//sprintf(temp, "after analyze image");
-	//log(RS2_LOG_SEVERITY_DEBUG, temp);
 	result->fillRate = res.data[snapshot_metrics::FILLRATE];
 	result->rmsFittingPlane = res.data[snapshot_metrics::FITTING_RMS];
 	result->rmsSubpixel = res.data[snapshot_metrics::SUBPIXEL];
 	result->accuracy = res.data[snapshot_metrics::ACCURACY];
 	result->angle = res.angles.angle;
 	drawTestPicture(_frame->as<video_frame>(), result);
-	//sprintf(temp, "before save result");
-	//log(RS2_LOG_SEVERITY_DEBUG, temp);
-	saveResult(result);
-#ifdef _WIN32
-	//char temp[20];
-	//sprintf(temp, "trigger save event");
-	//log(RS2_LOG_SEVERITY_DEBUG, temp);
-	SetEvent(gSaveImageEvent);
-#else
-	pthread_mutex_lock(&saveImgMtx);
-	pthread_cond_signal(&saveImgCon);
-	pthread_cond_signal(&saveImgCon);
-	pthread_cond_signal(&saveImgCon);
-	pthread_mutex_unlock(&saveImgMtx);
-#endif
-	/*video_frame vframe = _frame->as<video_frame>();
-	rect fRect; 
-	int actual_w = vframe.get_width(), actual_h = vframe.get_height(); int validPixelsCount = 0; unsigned long depthSum = 0; int idx = 0;
-	//fRect.x = vframe.get_width() / 3; fRect.y = vframe.get_height() / 3;
-	//fRect.w = fRect.x; fRect.h = fRect.y;
-	fRect.x = actual_w * (0.5f - 0.5f * gConfig.ROIPercent * 0.01); fRect.y = actual_h * (0.5f - 0.5f * gConfig.ROIPercent * 0.01);
-	fRect.w = actual_w * (0.5f + 0.5f * gConfig.ROIPercent * 0.01) - fRect.x; fRect.h = actual_h * (0.5f + 0.5f * gConfig.ROIPercent * 0.01) - fRect.y;
-	Mat depth16(Size(vframe.get_width(), vframe.get_height()), CV_16U, (void*)data);
-	bool test;
-	region_of_interest roi = { fRect.x, fRect.y, fRect.x + fRect.w, fRect.y + fRect.h };
-
-	//temporily comment out, waiting for more mature RMS calculation.
-	//auto res = analyze_depth_image(data, actual_w, actual_h, 0.001, roi, baseline_mm, &intrin);
-	//result->rms = res.RMS;
-
-	//for center testing
-	for (int i = fRect.x; i < fRect.x + fRect.w; i++) // width (col), x
-	{
-		for (int j = fRect.y; j < fRect.y + fRect.h; j++) // height (row), y
-		{
-			if (depth16.at<ushort>(j, i) != 0)
-			{
-				validPixelsCount += 1; // valid depth pixel
-				depthSum += depth16.at<ushort>(j, i);
-			}
-		}
-	}
-
-	result->fillRateA = validPixelsCount / (fRect.w*fRect.h);
-	if (validPixelsCount != 0)
-		result->meanA = depthSum / validPixelsCount;
-	else
-	{
-		result->meanA = -1;//test fail.
-#ifdef _WIN32
-		return;
-#else
-		return nullptr;
-#endif
-	}
-
-	depthSum = 0;
-	for (int i = fRect.x; i < fRect.x + fRect.w; i++) // width (col), x
-	{
-		for (int j = fRect.y; j < fRect.y + fRect.h; j++) // height (row), y
-		{
-			if (depth16.at<ushort>(j, i) != 0)
-			{
-				depthSum += pow(depth16.at<ushort>(j, i) - result->meanA, 2.0);
-			}
-		}
-	}
-
-	if (validPixelsCount != 0)
-		result->stdA = sqrt(depthSum / validPixelsCount);
-	
-	drawTestPicture(_frame->as<video_frame>(), fRect, result);
 	saveResult(result);
 #ifdef _WIN32
 	SetEvent(gSaveImageEvent);
@@ -435,167 +292,7 @@ void* calResultThreadFun(void* ctx){
 	pthread_cond_signal(&saveImgCon);
 	pthread_mutex_unlock(&saveImgMtx);
 #endif
-*/
 }
-
-/*#ifdef _WIN32
-void calResultThreadFun(frame* _frame, unsigned short* data, test_result* result, float baseline_mm, rs2_intrinsics intrin) {
-#else
-void* calResultThreadFun(void* ctx) {
-	CalResultStrut* resultSet = (CalResultStrut*)ctx;
-	frame* _frame = resultSet->frame; unsigned short* data = resultSet->data; test_result* result = resultSet->result; float baseline_mm = resultSet->baseline_mm; rs2_intrinsics intrin = resultSet->intrin;
-#endif
-	video_frame vframe = _frame->as<video_frame>();
-	rect fRect;
-	int actual_w = vframe.get_width(), actual_h = vframe.get_height(); int validPixelsCount = 0; unsigned long depthSum = 0; int idx = 0;
-	fRect.x = vframe.get_width() / 3; fRect.y = vframe.get_height() / 3;
-	fRect.w = fRect.x; fRect.h = fRect.y;
-	Mat depth16(Size(vframe.get_width(), vframe.get_height()), CV_16U, (void*)data);
-	bool test;
-
-	//temporily comment out, waiting for more mature RMS calculation.
-	//auto res = analyze_depth_image(data, actual_w, actual_h, 0.001, baseline_mm, &intrin, vframe.get_timestamp());
-	//result->rms = res.RMS;
-
-	//for center testing
-	for (int i = fRect.x; i < fRect.x + fRect.w; i++) // width (col), x
-	{
-		for (int j = fRect.y; j < fRect.y + fRect.h; j++) // height (row), y
-		{
-			if (depth16.at<ushort>(j, i) != 0)
-			{
-				validPixelsCount += 1; // valid depth pixel
-				depthSum += depth16.at<ushort>(j, i);
-			}
-		}
-	}
-
-	result->fillRate[test_result::C] = validPixelsCount / (fRect.w*fRect.h);
-	if (validPixelsCount != 0)
-		result->mean[test_result::C] = depthSum / validPixelsCount;
-	else
-	{
-		result->mean[test_result::C] = -1;//test fail.
-#ifdef _WIN32
-		return;
-#else
-		return nullptr;
-#endif
-	}
-
-	depthSum = 0;
-	for (int i = fRect.x; i < fRect.x + fRect.w; i++) // width (col), x
-	{
-		for (int j = fRect.y; j < fRect.y + fRect.h; j++) // height (row), y
-		{
-			if (depth16.at<ushort>(j, i) != 0)
-			{
-				depthSum += pow(depth16.at<ushort>(j, i) - result->mean[test_result::C], 2.0);
-			}
-		}
-	}
-
-	if (validPixelsCount != 0)
-		result->std[test_result::C] = sqrt(depthSum / validPixelsCount);
-
-	//for UR testing
-	validPixelsCount = 0;
-	depthSum = 0;
-	for (int i = fRect.x + fRect.w; i < actual_w - gConfig.edgeOffset; i++) // width (col), x
-	{
-		for (int j = 0; j < fRect.h; j++) // height (row), y
-		{
-			if (depth16.at<ushort>(j, i) != 0)
-			{
-				validPixelsCount += 1; // valid depth pixel
-				depthSum += depth16.at<ushort>(j, i);
-			}
-		}
-	}
-
-	result->fillRate[test_result::UR] = validPixelsCount / ((actual_w - (fRect.x + fRect.w) - gConfig.edgeOffset)*fRect.h);
-	if (validPixelsCount != 0)
-		result->mean[test_result::UR] = depthSum / validPixelsCount;
-	else
-	{
-		result->mean[test_result::UR] = -1;//test fail.
-#ifdef _WIN32
-		return;
-#else
-		return nullptr;
-#endif
-	}
-
-	depthSum = 0;
-	for (int i = fRect.x + fRect.w; i < actual_w - gConfig.edgeOffset; i++) // width (col), x
-	{
-		for (int j = 0; j < fRect.h; j++) // height (row), y
-		{
-			if (depth16.at<ushort>(j, i) != 0)
-			{
-				depthSum += pow(depth16.at<ushort>(j, i) - result->mean[test_result::UR], 2.0);
-			}
-		}
-	}
-
-	if (validPixelsCount != 0)
-		result->std[test_result::UR] = sqrt(depthSum / validPixelsCount);
-
-	//for BR testing
-	validPixelsCount = 0;
-	depthSum = 0;
-	for (int i = fRect.x + fRect.w; i < actual_w - gConfig.edgeOffset; i++) // width (col), x
-	{
-		for (int j = fRect.y + fRect.h; j < actual_h; j++) // height (row), y
-		{
-			if (depth16.at<ushort>(j, i) != 0)
-			{
-				validPixelsCount += 1; // valid depth pixel
-				depthSum += depth16.at<ushort>(j, i);
-			}
-		}
-	}
-
-	result->fillRate[test_result::BR] = validPixelsCount / ((actual_w - (fRect.x + fRect.w) - gConfig.edgeOffset)*fRect.h);
-	if (validPixelsCount != 0)
-		result->mean[test_result::BR] = depthSum / validPixelsCount;
-	else
-	{
-		result->mean[test_result::BR] = -1;//test fail.
-#ifdef _WIN32
-		return;
-#else
-		return nullptr;
-#endif
-	}
-
-	depthSum = 0;
-	for (int i = fRect.x + fRect.w; i < actual_w - gConfig.edgeOffset; i++) // width (col), x
-	{
-		for (int j = fRect.y + fRect.h; j < actual_h; j++) // height (row), y
-		{
-			if (depth16.at<ushort>(j, i) != 0)
-			{
-				depthSum += pow(depth16.at<ushort>(j, i) - result->mean[test_result::BR], 2.0);
-			}
-		}
-	}
-
-	if (validPixelsCount != 0)
-		result->std[test_result::BR] = sqrt(depthSum / validPixelsCount);
-
-	drawTestPicture(_frame->as<video_frame>(), fRect, result);
-	saveResult(result);
-#ifdef _WIN32
-	SetEvent(gSaveImageEvent);
-#else
-	pthread_mutex_lock(&saveImgMtx);
-	pthread_cond_signal(&saveImgCon);
-	pthread_cond_signal(&saveImgCon);
-	pthread_cond_signal(&saveImgCon);
-	pthread_mutex_unlock(&saveImgMtx);
-#endif
-}*/
 
 struct saved_frame_data 
 {
@@ -609,7 +306,6 @@ struct saved_frame_data
 			delete _frame;
 		if (_points != nullptr)
 			_points = nullptr;
-			//delete _points;
 		not_model = nullptr;
 	}
 };
@@ -617,7 +313,6 @@ struct saved_frame_data
 std::mutex locker;
 
 #ifdef _WIN32
-//void saveFrameThreadFun(saved_frame_data data, points* _points) {
 void saveFrameThreadFun(saved_frame_data data) {
 #else
 void* saveFrameThreadFun(void* _data){
@@ -632,27 +327,14 @@ void* saveFrameThreadFun(void* _data){
 		pthread_mutex_unlock(&saveImgMtx);
 #endif
 		std::lock_guard<std::mutex> lock(locker);
-		/*char temp[50];
-		sprintf(temp, "enter thread - %s", data.filename);
-		log(RS2_LOG_SEVERITY_DEBUG, temp);
-		sprintf(temp, "before locker- %s", data.filename);
-		log(RS2_LOG_SEVERITY_DEBUG, temp);
-
-		sprintf(temp, "after locker - %s", data.filename);
-		log(RS2_LOG_SEVERITY_DEBUG, temp);*/
 		video_frame frame = data._frame->as<video_frame>();
 		std::string filenamePng = data.filename + ".png";
-		std::string filenamePly = data.filename + ".ply";
+		//std::string filenamePly = data.filename + ".ply";
 		stbi_write_png(filenamePng.data(), frame.get_width(), frame.get_height(), frame.get_bytes_per_pixel(), frame.get_data(), frame.get_width() * frame.get_bytes_per_pixel());
-		//sprintf(temp, "after write png - %s", data.filename);
-		//log(RS2_LOG_SEVERITY_DEBUG, temp);
-		//data.not_model->add_notification({ to_string() << "Snapshot was saved to " << filenamePng.data(),
-		//0, RS2_LOG_SEVERITY_INFO,
-		//RS2_NOTIFICATION_CATEGORY_UNKNOWN_ERROR});
+		data.not_model->add_notification({ to_string() << "Snapshot was saved to " << filenamePng.data(),
+		0, RS2_LOG_SEVERITY_INFO,
+		RS2_NOTIFICATION_CATEGORY_UNKNOWN_ERROR});
 		SetEvent(gSaveFinishEvent);
-		//char temp[50];
-		//sprintf(temp, "exit thread - %s", data.filename);
-		//log(RS2_LOG_SEVERITY_DEBUG, temp);
 		/*if (data._points != nullptr)
 		{
 			//export_to_ply(filenamePly, *(data.not_model), *data._points, frame);
@@ -677,14 +359,13 @@ bool calTestResult(test_result result)
 {
 	if (result.fillRate * 100.0f < gConfig.fillRatePassP)
 		return false;
-	if (abs(result.accuracy) > gConfig.accuracyPassP)
+	if (abs(result.accuracy) < gConfig.accuracyPassP)
 		return false;
 	if (result.rmsFittingPlane > gConfig.rmsFittingPlanePassRate)
 		return false;
 	//remove temporarily, waiting for more information about criteria of subpixel.
 	//if (result.rmsSubpixel > gConfig.rmsSubpixelPassRate)
 		//return false;
-	
 	return true;
 }
 
@@ -810,22 +491,13 @@ inline float3 approximate_intersection(const plane& p, const rs2_intrinsics* int
 	return approximate_intersection(p, intrin, x, y, 0.f, 1000.f);
 }
 
-//float* calRMS(const std::vector<rs2::float3>& points, rs2::plane p, float baseline_mm, float focal_length_pixels, float plane_fit_to_ground_truth_mm) {
-void calRMS(const std::vector<rs2::float3>& points, rs2::plane p, float baseline_mm, float focal_length_pixels, float plane_fit_to_ground_truth_mm, float (&result)[4]) {
+void calDepthResult(const std::vector<rs2::float3>& points, rs2::plane p, float baseline_mm, float focal_length_pixels, float plane_fit_to_ground_truth_mm, float (&result)[4]) {
 	static const float TO_METERS = 0.001f;
 	static const float TO_MM = 1000.f;
 	static const float TO_PERCENT = 100.f;
 
-	//float* result = new float*(4);
-
 	// Calculate fill rate relative to the ROI
-	//char temp[20];
-	//sprintf(temp, "before fill test\n");
-	//log(RS2_LOG_SEVERITY_DEBUG, temp);
 	result[snapshot_metrics::FILLRATE] = points.size() / float((gRoi.max_x - gRoi.min_x)*(gRoi.max_y - gRoi.min_y)) * TO_PERCENT;
-	//fill->add_value(fill_rate);
-	//sprintf(temp, "after fill test\n");
-	//log(RS2_LOG_SEVERITY_DEBUG, temp);
 
 	const float bf_factor = baseline_mm * focal_length_pixels * TO_METERS; // also convert point units from mm to meter
 
@@ -864,19 +536,10 @@ void calRMS(const std::vector<rs2::float3>& points, rs2::plane p, float baseline
 	}
 
 	// Show Z accuracy metric only when Ground Truth is available
-	//z_accuracy->enable(ground_truth_mm > 0);
-	//if (ground_truth_mm)
-	//{
-	//sprintf(temp, "before accuracy test");
-	//log(RS2_LOG_SEVERITY_DEBUG, temp);
-		std::sort(begin(gt_errors), end(gt_errors));
-		auto gt_median = gt_errors[gt_errors.size() / 2];
-		result[snapshot_metrics::ACCURACY] = TO_PERCENT * (gt_median / gConfig.distance);
 
-		///sprintf(temp, "after accuracy test");
-		//log(RS2_LOG_SEVERITY_DEBUG, temp);
-		//z_accuracy->add_value(accuracy);
-	//}
+	std::sort(begin(gt_errors), end(gt_errors));
+	auto gt_median = gt_errors[gt_errors.size() / 2];
+	result[snapshot_metrics::ACCURACY] = TO_PERCENT * (gt_median / gConfig.distance);
 
 	// Calculate Sub-pixel RMS for Stereo-based Depth sensors
 	double total_sq_disparity_diff = 0;
@@ -885,46 +548,14 @@ void calRMS(const std::vector<rs2::float3>& points, rs2::plane p, float baseline
 		total_sq_disparity_diff += disparity*disparity;
 	}
 	result[snapshot_metrics::SUBPIXEL] = static_cast<float>(std::sqrt(total_sq_disparity_diff / disparities.size()));
-	//sub_pixel_rms_error->add_value(rms_subpixel_val);
 
-	// Calculate Plane Fit RMS  (Spatial Noise) mm, and divide the origin to plane distance to get back the percentage.
+	// Calculate Plane Fit RMS (Spatial Noise) %, and divide the origin to plane distance to get back the percentage.
 	float origin2plane = static_cast<float>(-p.d * 1000);
 	double plane_fit_err_sqr_sum = std::inner_product(distances.begin(), distances.end(), distances.begin(), 0.);
 	result[snapshot_metrics::FITTING_RMS] = static_cast<float>(std::sqrt(plane_fit_err_sqr_sum / distances.size()))/origin2plane*100;
-	//return result;
-	//plane_fit_rms_error->add_value(rms_error_val);
-	/*const double bf_factor = baseline_mm * focal_length_pixels * 0.001; // also convert point units from meter to mm
-
-																		//std::vector<double> distances; // Calculate the distances of all points in the ROI to the fitted plane
-	std::vector<std::pair<double, double> > calc;   // Distances and disparities
-	calc.reserve(points.size());        // Calculate the distances of all points in the ROI to the fitted plane
-
-										// Calculate the distance and disparity errors from the point cloud to the fitted plane
-	for (auto point : points)
-	{
-		// Find distance from point to the reconstructed plane
-		auto dist2plane = p.a*point.x + p.b*point.y + p.c*point.z + p.d;
-		// Project the point to plane in 3D and find distance to the intersection point
-		rs2::float3 plane_intersect = { float(point.x - dist2plane*p.a),
-			float(point.y - dist2plane*p.b),
-			float(point.z - dist2plane*p.c) };
-
-		// Store distance and disparity errors
-		calc.emplace_back(std::make_pair(std::fabs(dist2plane) * 1000,
-			bf_factor / point.length() - bf_factor / plane_intersect.length()));
-	}
-
-	std::sort(calc.begin(), calc.end()); // Filter out the X% of the samples that are further away from the mean
-	auto begin = calc.begin(), end = calc.end();
-	double total_sq_disparity_diff = 0;
-	for (auto itr = begin; itr < end; ++itr)
-		total_sq_disparity_diff += (*itr).second*(*itr).second;
-	return static_cast<float>(std::sqrt(total_sq_disparity_diff / (points.size())));*/
 }
 
 bool calPlane(const uint16_t* data, int w, int h, float units, rs2_intrinsics* intrin, std::array<float3, 4>* corners, angles& angles, std::vector<rs2::float3>* _roi_pixels, plane* _p) {
-	//region_of_interest roi = { w / 3, h / 3, w * 2 / 3, h * 2 / 3 };
-
 	std::vector<rs2::float3>* roi_pixels;
 	if (_roi_pixels == nullptr)
 		roi_pixels = new std::vector<rs2::float3>;
@@ -995,7 +626,6 @@ bool calPlane(const uint16_t* data, int w, int h, float units, rs2_intrinsics* i
 	return calPlane(data, w, h, units, intrin, corners, angles, nullptr, nullptr);
 }
 
-//snapshot_metrics analyze_depth_image(rs2::video_frame depth_frame, float units, float baseline_mm, rs2_intrinsics* intrin)
 snapshot_metrics analyze_depth_image(const uint16_t* data, int w, int h, float units, float baseline_mm, rs2_intrinsics* intrin)
 {
 	snapshot_metrics result{ w, h, gRoi,{} };
@@ -1010,51 +640,19 @@ snapshot_metrics analyze_depth_image(const uint16_t* data, int w, int h, float u
 	// Find the distance between the "rectified" fit and the ground truth planes.
 	float plane_fit_to_gt_dist_mm = (gConfig.distance > 0.f) ? (plane_fit_pivot.z * 1000 - gConfig.distance) : 0;
 
-	/*char temp[30];
-	sprintf(temp, "before calRMS\n");
-	log(RS2_LOG_SEVERITY_DEBUG, temp);*/
-
 	//result.data = calRMS(*roi_pixels, *p, baseline_mm, intrin->fx, plane_fit_to_gt_dist_mm, result.data);
-	calRMS(*roi_pixels, *p, baseline_mm, intrin->fx, plane_fit_to_gt_dist_mm, result.data);
-
-	/*sprintf(temp, "after calRMS\n");
-	log(RS2_LOG_SEVERITY_DEBUG, temp);*/
+	calDepthResult(*roi_pixels, *p, baseline_mm, intrin->fx, plane_fit_to_gt_dist_mm, result.data);
 
 	result.p = *p;
 	result.plane_corners = *corners;
 
 	// Distance of origin (the camera) from the plane is encoded in parameter D of the plane
 	result.distance = static_cast<float>(-p->d * 1000);
-	// Angle can be calculated from param C
-	//result.angle = static_cast<float>(std::acos(std::abs(p->c)) / M_PI * 180.);
-	//result.angles.angle = static_cast<float>(std::acos(std::abs(p->c)) / M_PI * 180.);
-
-	// Calculate normal
-	/*auto n = float3{ p->a, p->b, p->c };
-	auto cam = float3{ 0.f, 0.f, -1.f };
-	auto dot = n * cam;
-	auto u = cam - n * dot;
-
-	result.angles.angle_x = u.x;
-	result.angles.angle_y = u.y;*/
 
 	delete p, roi_pixels, corners;
 	return result;
 }
 #pragma endregion RMS_Cal
-
-DEV_TYPE checkDevType(std::string devName)
-{
-	int idx = devName.find("RealSense ");
-	idx += std::string("RealSense ").size();
-	std::string model = devName.substr(idx, 3);
-	if (model.compare("410") == 0)
-		return DEV_TYPE::RS410;
-	else if (model.compare("430") == 0)
-		return DEV_TYPE::RS430;
-	
-	return DEV_TYPE::COUNT;
-}
 
 void startStreams(float& baseline, rs2_intrinsics& intrin, stream_format_idx sfIdx, std::shared_ptr<subdevice_model>& depthDev, std::shared_ptr<subdevice_model>& colorDev, viewer_model& viewerModel) {
 	if (depthDev->streaming)
@@ -1062,16 +660,16 @@ void startStreams(float& baseline, rs2_intrinsics& intrin, stream_format_idx sfI
 	depthDev->stream_enabled[sfIdx.depthSIdx] = true;
 	depthDev->stream_enabled[sfIdx.infra1SIdx] = true;
 	depthDev->stream_enabled[sfIdx.infra2SIdx] = true;
-	//depthDev->ui.selected_format_id[sfIdx.infra1SIdx] = sfIdx.infra1Y8FIdx;//change the infrared1 format from RGB to Y8
+	colorDev->stream_enabled[sfIdx.rgbColorFIdx] = true;
 	auto profiles = depthDev->get_selected_profiles();
 	auto profilesColor = colorDev->get_selected_profiles();
 	//get baseline while test
 	stream_profile left_s, right_s;
 	for (auto p : profiles)
 	{
-		if (p.stream_index() == 2 && p.stream_type() == RS2_STREAM_INFRARED)
+		if (p.unique_id() == sfIdx.infra2SIdx)
 			right_s = p;
-		if (p.stream_index() == 0 && p.stream_type() == RS2_STREAM_DEPTH)
+		if (p.unique_id() == sfIdx.depthSIdx)
 			left_s = p;
 	}
 	auto extrin = (left_s).get_extrinsics_to(right_s);
@@ -1090,7 +688,7 @@ void startStreams(float& baseline, rs2_intrinsics& intrin, stream_format_idx sfI
 
 void getAngleSuggestion(angles angles, char* suggestion)
 {
-	if (angles.angle <= MAX_ANGLE)
+	if (angles.angle <= gConfig.maxAngle)
 	{
 		sprintf(suggestion, "%f", angles.angle);
 		return;
@@ -1119,9 +717,6 @@ int main(int, char**) try
     // Init GUI
     if (!glfwInit()) exit(1);
 
-	//log_to_file(RS2_LOG_SEVERITY_DEBUG, "librealsense.log");
-
-
     rs2_error* e = nullptr;
     std::string title = to_string() << "D400 IQC v" << MAJOR_VERSION << "." << MINOR_VERSION << "." << PATCH_VERSION;
 
@@ -1133,11 +728,10 @@ int main(int, char**) try
     imgui_easy_theming(font_14, font_18);
 	setFontForWindow(selected_font, font_18, font_14);
 
-    std::vector<std::string> restarting_device_info;
-    bool isStreaming = false, is_3d_view = false, paused = false, refresh_device_list=true, isPreview = false, showResult = false, nextRoundPlay = false, showTestCondition = false, editable = false/*hasInited = false*/;
-    std::vector<std::pair<std::string, std::string>> device_names;
-    std::string error_message{ "" }, label{ "" }, resultFolder;
-    //std::string ;
+    //std::vector<std::string> restarting_device_info;
+    bool isStreaming = false, paused = false, refresh_device_list=true, isPreview = false, showResult = false, editable = false/*hasInited = false*/;
+    //std::vector<std::pair<std::string, std::string>> device_names;
+    std::string error_message{ "" }, label{ "" }, resultFolder{""};
     auto last_time_point = std::chrono::high_resolution_clock::now();
     std::vector<device_model> device_models;
     std::vector<device> devs;
@@ -1145,7 +739,7 @@ int main(int, char**) try
 	saved_frame_data frameData[4];
 	int saveImgidx = 0, testIdx = 0;
 	stream_format_idx sfIdx;
-	char buffer[100], outputFilePath[100];
+	char /*buffer[100],*/ outputFilePath[100];
 	float baseline_mm = -1.f;
 	rs2_intrinsics intrin;
 
@@ -1154,12 +748,13 @@ int main(int, char**) try
 	viewer_model mViewer_model;
 	device_list list;
     std::mutex m;
-	DEV_TYPE devType = DEV_TYPE::COUNT;
 	test_result testResult;
 	angles angles;
     mouse_info mouse;
 	int col1 = 20;
 	int col2 = 135;
+	bool JSONErr = false;
+	int errorCount = 0;//for displaying JSON error oopup window
 #ifdef _WIN32
 	std::thread* saveThread[4] = { nullptr, nullptr, nullptr, nullptr };
 	std::thread* calResultThread = nullptr;
@@ -1168,13 +763,12 @@ int main(int, char**) try
 	pthread_t calResultThread = NULL;
 	CalResultStrut testDataSet;
 #endif
-	
-
 	//get the configuration in JSON file
-	readConfig();
-	//int deviation = gConfig.distance * gConfig.meanPassP / 100;
-	//gConfig.minDist = gConfig.distance - deviation;
-	//gConfig.maxDist = gConfig.distance + deviation;
+	if (!readConfig())
+	{
+		error_message = "JSON file error, exit application";
+		JSONErr = true;
+	}
 
     user_data data;
     data.curr_window = window;
@@ -1222,6 +816,7 @@ int main(int, char**) try
 				mViewer_model.selected_depth_source_uid = -1;
 				gRoi.min_x = -1;
 				isStreaming = false;
+				device_models.clear();
             }
         }
 
@@ -1269,7 +864,6 @@ int main(int, char**) try
 					auto prev_size = list.size();
 					list = ctx.query_devices();
 
-					device_names = get_devices_names(list);
 					auto dev = [&]() {
 						for (size_t i = 0; i < list.size(); i++)
 						{
@@ -1399,44 +993,15 @@ int main(int, char**) try
                 pos = ImGui::GetCursorPos();
                 ImGui::PushStyleColor(ImGuiCol_Button, sensor_header_light_blue);
                 ImGui::SetCursorPos({ 8, pos.y + 14 });
-               /* if (dev_model.is_recording)
-                {
-                    ImGui::PushStyleColor(ImGuiCol_Text, redish);
-                    label = to_string() << u8"\uf111";
-                    ImGui::Text(label.c_str());
-                    ImGui::PopStyleColor();
-                }
-                else if (dev_model.dev.is<playback>())
-                {
-                    label = to_string() << u8" \uf008";
-                    ImGui::Text(label.c_str());
-                }
-                else
-                {*/
-                    label = to_string() << u8" \uf03d";
-                    ImGui::Text(label.c_str());
-                //}
+           
+                label = to_string() << u8" \uf03d";
+                ImGui::Text(label.c_str());
+                
                 ImGui::SameLine();
 
                 label = to_string() << dev_model.dev.get_info(RS2_CAMERA_INFO_NAME);
                 ImGui::Text(label.c_str());
                 ImGui::PushStyleColor(ImGuiCol_Text, from_rgba(0xc3, 0xd5, 0xe5, 0xff));
-
-                /*int playback_control_panel_height = 0;
-                if (auto p = dev_model.dev.as<playback>())
-                {
-                    auto full_path = p.file_name();
-                    auto filename = get_file_name(full_path);
-
-                    ImGui::Text("File: \"%s\"", filename.c_str());
-                    if (ImGui::IsItemHovered())
-                        ImGui::SetTooltip(full_path.c_str());
-
-                    auto playback_panel_pos = ImVec2{ 0, pos.y + panel_y + 18 };
-                    ImGui::SetCursorPos(playback_panel_pos);
-                    playback_panel_pos.y = dev_model.draw_playback_panel(selected_font, mViewer_model);
-                    playback_control_panel_height += playback_panel_pos.y;
-                }*/
 
                 ImGui::SetCursorPos({ 0, pos.y + header_h /*+ playback_control_panel_height */});
                 pos = ImGui::GetCursorPos();
@@ -1514,9 +1079,6 @@ int main(int, char**) try
                     label = to_string() << sub->s.get_info(RS2_CAMERA_INFO_NAME) << "##" << dev_model.id;
                     ImGui::PushStyleColor(ImGuiCol_Header, sensor_header_light_blue);
 
-                    //ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, { 20, 20 });
-                    //ImGui::PushStyleVar(ImGuiStyleVar_ItemInnerSpacing, { 0, 0 });
-
 					std::string label = to_string() << "Stream Selection Columns##" << sub->dev.get_info(RS2_CAMERA_INFO_NAME)
 						<< sub->s.get_info(RS2_CAMERA_INFO_NAME);
 
@@ -1528,28 +1090,17 @@ int main(int, char**) try
 					ImGui::Text("Resolution:");
 					ImGui::SameLine(); ImGui::SetCursorPosX(col1);
 
-					if (!editable)
+					ImGui::Text("%s", res_chars[sub->ui.selected_res_id]);
+					std::string res = sub->resolutions[sub->ui.selected_res_id];
+					auto idx_x = res.find("x");
+					int width = stoi(res.substr(0, idx_x-1));
+					int height = stoi(res.substr(idx_x+1, res.length()));
+					if (gRoi.min_x == -1)
 					{
-						ImGui::Text("%s", res_chars[sub->ui.selected_res_id]);
-						std::string res = sub->resolutions[sub->ui.selected_res_id];
-						auto idx_x = res.find("x");
-						int width = stoi(res.substr(0, idx_x-1));
-						int height = stoi(res.substr(idx_x+1, res.length()));
-						if (gRoi.min_x == -1)
-						{
-							gRoi = { int(width * (0.5f - 0.5f * gConfig.ROIPercent * 0.01)), int(height * (0.5f - 0.5f * gConfig.ROIPercent * 0.01)),
-								int(width * (0.5f + 0.5f * gConfig.ROIPercent * 0.01)), int(height * (0.5f + 0.5f * gConfig.ROIPercent * 0.01)) };
-						}
+						gRoi = { int(width * (0.5f - 0.5f * gConfig.ROIPercent * 0.01)), int(height * (0.5f - 0.5f * gConfig.ROIPercent * 0.01)),
+							int(width * (0.5f + 0.5f * gConfig.ROIPercent * 0.01)), int(height * (0.5f + 0.5f * gConfig.ROIPercent * 0.01)) };
 					}
-					else
-					{
-						ImGui::PushItemWidth(-1);
-						ImGui::PushStyleColor(ImGuiCol_TextSelectedBg, { 1,1,1,1 });
-						ImGui::Combo(label.c_str(), &sub->ui.selected_res_id, res_chars.data(),
-							static_cast<int>(res_chars.size()));
-						ImGui::PopStyleColor();
-						ImGui::PopItemWidth();
-					}
+					
 					ImGui::SetCursorPosX(col0);
 
 					if (sub->show_single_fps_list)
@@ -1561,20 +1112,8 @@ int main(int, char**) try
 						label = to_string() << "##" << sub->dev.get_info(RS2_CAMERA_INFO_NAME)
 							<< sub->s.get_info(RS2_CAMERA_INFO_NAME) << " fps";
 
-						if (!editable)
-						{
-							ImGui::Text("%s", fps_chars[sub->ui.selected_shared_fps_id]);
-						}
-						else
-						{
-							ImGui::PushItemWidth(-1);
-							ImGui::PushStyleColor(ImGuiCol_TextSelectedBg, { 1,1,1,1 });
-							ImGui::Combo(label.c_str(), &sub->ui.selected_shared_fps_id, fps_chars.data(),
-								static_cast<int>(fps_chars.size()));
-							ImGui::PopStyleColor();
-							ImGui::PopItemWidth();
-						}
-
+						ImGui::Text("%s", fps_chars[sub->ui.selected_shared_fps_id]);
+						
 						ImGui::SetCursorPosX(col0);
 					}
                     
@@ -1586,7 +1125,6 @@ int main(int, char**) try
 							if (sub->stream_display_names[f.first] == "Depth")
 							{
 								sfIdx.depthSIdx = f.first;
-								//sub->stream_enabled[sfIdx.depthSIdx] = true;//initial depth is enabled, disable it first.
 							}
 						}
 						int idx = 0;
@@ -1595,7 +1133,6 @@ int main(int, char**) try
 							if (sub->stream_display_names[f.first] == "Infrared 2")
 							{
 								sfIdx.infra2SIdx = f.first;
-								//sub->stream_enabled[sfIdx.infra2SIdx] = true;
 								for (; idx < f.second.size(); idx++)
 								{
 									if (f.second[idx] == "Y8")
@@ -1613,7 +1150,6 @@ int main(int, char**) try
 							if (sub->stream_display_names[f.first] == "Infrared 1")
 							{
 								sfIdx.infra1SIdx = f.first;
-								//sub->stream_enabled[sfIdx.infra1SIdx] = true;//initial to enable Infrared 1 stream;
 								for (; idx < f.second.size(); idx++)
 								{
 									if (f.second[idx] == "Y8")
@@ -1630,7 +1166,6 @@ int main(int, char**) try
 							if (sub->stream_display_names[f.first] == "Color")
 							{
 								sfIdx.rgbSIdx = f.first;
-								sub->stream_enabled[sfIdx.rgbSIdx] = true;
 								for (; idx < f.second.size(); idx++)
 								{
 									if (f.second[idx] == "RGB8")
@@ -1640,54 +1175,6 @@ int main(int, char**) try
 						}
 					}
 
-					/*for (auto&& f : sub->formats)
-					{
-						if (f.second.size() == 0)
-							continue;
-
-						auto formats_chars = get_string_pointers(f.second);
-
-						if (editable || (!editable && sub->stream_enabled[f.first]))
-						{
-							if (!editable)
-							{
-								label = to_string() << "    " << sub->stream_display_names[f.first];
-								ImGui::Text("%s", label.c_str());
-								
-							}
-							else
-							{
-								label = to_string() << sub->stream_display_names[f.first] << "##" << f.first;
-								ImGui::Checkbox(label.c_str(), &sub->stream_enabled[f.first]);
-							}
-						}
-					
-						if (sub->stream_enabled[f.first])
-						{
-							if (!editable)
-							{
-								ImGui::SameLine(); ImGui::SetCursorPosX(col1);
-								ImGui::Text("%s", formats_chars[sub->ui.selected_format_id[f.first]]);
-							}
-							else
-							{
-								ImGui::PushItemWidth(-1);
-								ImGui::PushStyleColor(ImGuiCol_TextSelectedBg, { 1,1,1,1 });
-								ImGui::Combo(label.c_str(), &sub->ui.selected_format_id[f.first], formats_chars.data(),
-									static_cast<int>(formats_chars.size()));
-								ImGui::PopStyleColor();
-								ImGui::PopItemWidth();
-							}
-							ImGui::SetCursorPosX(col0);
-						}
-						else
-						{
-
-						}
-					}*/
-
-                    //ImGui::PopStyleVar();
-                    //ImGui::PopStyleVar();
                     ImGui::PopStyleColor();
                 }
 
@@ -1712,7 +1199,6 @@ int main(int, char**) try
                 device_to_remove = nullptr;
             }
 
-            //ImGui::SetContentRegionWidth(windows_width);
             auto pos = ImGui::GetCursorScreenPos();
             auto h = ImGui::GetWindowHeight();
             if (h > pos.y - panel_y)
@@ -1734,25 +1220,9 @@ int main(int, char**) try
 
 				ImGui::GetWindowDrawList()->AddLine({ pos.x, pos.y }, { pos.x + panel_width, pos.y }, ImColor(from_rgba(255, 0, 0, 0xff)));
 				ImGui::GetWindowDrawList()->AddRectFilled({ abs_pos.x, abs_pos.y }, { abs_pos.x + panel_width, abs_pos.y + h }, ImColor(from_rgba(0, 0, 0, 0xff)));
-				/*if (showTestCondition)//default don't show the test criteria.
-				{
-					ImGui::Text("Pass Condition :");
-					ImGui::SetCursorPosX(col1); ImGui::Text("Fill Rate:");
-					ImGui::SameLine(); ImGui::SetCursorPosX(col2);
-					ImGui::Text("%f, %f, %f", gConfig.fillRatePassP[test_result::BLOCK::C], gConfig.fillRatePassP[test_result::BLOCK::UR], gConfig.fillRatePassP[test_result::BLOCK::BR]);
-
-					ImGui::SetCursorPosX(col1); ImGui::Text("Distance:");
-					ImGui::SameLine(); ImGui::SetCursorPosX(col2);
-					ImGui::Text("%d", gConfig.distance);
-
-					ImGui::SetCursorPosX(col1); ImGui::Text("Mean Range:");
-					ImGui::SameLine(); ImGui::SetCursorPosX(col2);
-					ImGui::Text("%d ~ %d", gConfig.minDist, gConfig.maxDist);
-				}*/
 
 				if (showResult)
 				{
-					//ImGui::Text("Test Result "); ImGui::SameLine(); 
 					ImGui::Text("Fill Rate:");
 					ImGui::SetCursorPosX(col2);
 					ImGui::Text("%f", testResult.fillRate);
@@ -1761,43 +1231,13 @@ int main(int, char**) try
 					ImGui::SetCursorPosX(col2);
 					ImGui::Text("%f", testResult.accuracy);
 
-					//remove temporarily, waiting for more information about criteria of subpixel.
-					/*ImGui::Text("Subpixel RMS (pixel):");
-					ImGui::SetCursorPosX(col2);
-					ImGui::Text("%f", testResult.rmsSubpixel);*/
-
 					ImGui::Text("Fitting Plane RMS:");
 					ImGui::SetCursorPosX(col2);
-					ImGui::Text("%f", testResult.rmsFittingPlane);
-					/*std::string area[3] = { "Center", "Upper Right", "Bottom Right" };
-					ImGui::Text("Test Result:");
-					//temporily comment out, waiting for more mature RMS calculation.
-					//ImGui::SetCursorPosX(col1); ImGui::Text("Plane RMS:");
-					//ImGui::SameLine(); ImGui::SetCursorPosX(col2);
-					//ImGui::Text("%f", testResult.rms);
-
-					for (int i = 0; i < test_result::COUNT; i++) {
-						label = to_string() << "[" << area[i] << "]";
-						ImGui::Text(label.c_str());
-						//ImGui::Text("Test Result "); ImGui::SameLine(); 
-						ImGui::SetCursorPosX(col1); ImGui::Text("Fill Rate:");
-						ImGui::SameLine(); ImGui::SetCursorPosX(col2);
-						ImGui::Text("%f", testResult.fillRate[i]);
-
-						ImGui::SetCursorPosX(col1); ImGui::Text("Avg Distance:");
-						ImGui::SameLine(); ImGui::SetCursorPosX(col2);
-						ImGui::Text("%f", testResult.mean[i]);
-
-						ImGui::SetCursorPosX(col1); ImGui::Text("Std:");
-						ImGui::SameLine(); ImGui::SetCursorPosX(col2);
-						ImGui::Text("%f", testResult.std[i]);
-					}*/
-					
+					ImGui::Text("%f", testResult.rmsFittingPlane);				
 				}
 			
 				ImGui::PopStyleColor(1);
 				ImGui::PopFont();
-
 			}
 
 			if(device_models.size() != 0)
@@ -1827,21 +1267,9 @@ int main(int, char**) try
 							ImGui::SetCursorPosY(abs_pos.y + 10);
 							if (ImGui::Button("Preview", { 100, 80 }))
 							{
-								//enable infrared 1 stream with RGB format for preview
-								/*subRS->stream_enabled[sfIdx.infra1SIdx] = true;
-								if (sfIdx.infra1ColorFIdx != -1)
-									subRS->ui.selected_format_id[sfIdx.infra1SIdx] = sfIdx.infra1ColorFIdx;
-								else
-									subRS->ui.selected_format_id[sfIdx.infra1SIdx] = sfIdx.infra1Y8FIdx;*/
 								startStreams(baseline_mm, intrin, sfIdx, subDepth, subColor, mViewer_model);
 								showResult = false;
 								isPreview = true;
-								/*auto profiles = subRS->get_selected_profiles();
-								subRS->play(profiles);
-								for (auto&& profile : profiles)
-								{
-									mViewer_model.streams[profile.unique_id()].dev = subRS;
-								}*/
 							}
 						}
 						else {
@@ -1863,44 +1291,12 @@ int main(int, char**) try
 							ImGui::SetCursorPosX(abs_pos.x + 160);
 							ImGui::SetCursorPosY(abs_pos.y + 10);
 							if (ImGui::Button("Test", { 100, 80 })) {
-								/*if (isPreview)
-								{
-									subRS->stop();//stop preview stream and go through the process to clean the stream.
-									std::this_thread::sleep_for(std::chrono::milliseconds(300));
-									isPreview = false;
-								}*/
 								startStreams(baseline_mm, intrin, sfIdx, subDepth, subColor, mViewer_model);
 								gCalculate_sts = -1;
 								gStartTesting = true;
 								gJoinTrigger = true;
 								showResult = false;
 								isPreview = false;
-								/*subRS->stream_enabled[sfIdx.depthSIdx] = true;
-								subRS->stream_enabled[sfIdx.infra2SIdx] = true;
-								subRS->ui.selected_format_id[sfIdx.infra1SIdx] = sfIdx.infra1Y8FIdx;//change the infrared1 format from RGB to Y8
-								auto profiles = subRS->get_selected_profiles();
-								auto profilesColor = subColor->get_selected_profiles();
-								//get baseline while test
-								stream_profile left_s, right_s;
-								for (auto p : profiles)
-								{
-									if (p.stream_index() == 2 && p.stream_type() == RS2_STREAM_INFRARED)
-										right_s = p;
-									if (p.stream_index() == 0 && p.stream_type() == RS2_STREAM_DEPTH)
-										left_s = p;
-								}
-								auto extrin = (left_s).get_extrinsics_to(right_s);
-								baseline_mm = fabs(extrin.translation[0]) * 1000;  // baseline in mm
-								intrin = left_s.as<video_stream_profile>().get_intrinsics();
-
-								subRS->play(profiles);
-								std::this_thread::sleep_for(std::chrono::milliseconds(10));
-								subColor->play(profilesColor);
-
-								for (auto&& profile : profiles)
-									mViewer_model.streams[profile.unique_id()].dev = subRS;
-								for (auto&& profile : profilesColor)
-									mViewer_model.streams[profile.unique_id()].dev = subColor;*/
 #ifdef _WIN32
 								SetEvent(gStartTestingEvent);
 #else
@@ -1917,116 +1313,13 @@ int main(int, char**) try
 									subDepth->stop();
 									subColor->stop();
 									std::this_thread::sleep_for(std::chrono::milliseconds(300));
-									//subDepth->stream_enabled[sfIdx.depthSIdx] = false;
-									//subDepth->stream_enabled[sfIdx.infra2SIdx] = false;
 									showResult = true;
 								}
 							}
 						}
-
 
 						isStreaming = subDepth->streaming;
-						//1.0.8 backup, should be removed after 1.0.9 testing
-						/*if (!isPreview && !gStartTesting)
-						{
-							ImGui::SetCursorPosX(abs_pos.x + 25);
-							ImGui::SetCursorPosY(abs_pos.y + 10);
-							if (ImGui::Button("Preview", { 100, 80 }))
-							{
-								//enable infrared 1 stream with RGB format for preview
-								subRS->stream_enabled[sfIdx.infra1SIdx] = true;
-								if (sfIdx.infra1ColorFIdx != -1)
-									subRS->ui.selected_format_id[sfIdx.infra1SIdx] = sfIdx.infra1ColorFIdx;
-								else
-									subRS->ui.selected_format_id[sfIdx.infra1SIdx] = sfIdx.infra1Y8FIdx;
-								showResult = false;
-								isPreview = true;
-								auto profiles = subRS->get_selected_profiles();
-								subRS->play(profiles);
-								for (auto&& profile : profiles)
-								{
-									mViewer_model.streams[profile.unique_id()].dev = subRS;
-								}
-							}
-						}
-						else {
-							ImGui::GetWindowDrawList()->AddRectFilled({ abs_pos.x + 25, abs_pos.y + 10 }, { pos.x + 135, abs_pos.y + 90 }, ImColor(from_rgba(114, 109, 117, 0xff)));
-							ImGui::SetCursorPosX(abs_pos.x + 35);
-							ImGui::SetCursorPosY(abs_pos.y + 40);
-							ImGui::TextDisabled("Preview");
-						}
-						
-						if(gStartTesting)
-						{
-							ImGui::GetWindowDrawList()->AddRectFilled({ abs_pos.x + 160, abs_pos.y + 10 }, { pos.x + 270, abs_pos.y + 90 }, ImColor(from_rgba(114,109, 117, 0xff)));
-							ImGui::SetCursorPosX(abs_pos.x + 185);
-							ImGui::SetCursorPosY(abs_pos.y + 40);
-							ImGui::TextDisabled("Test");
-						}
-						else
-						{
-							ImGui::SetCursorPosX(abs_pos.x + 160);
-							ImGui::SetCursorPosY(abs_pos.y + 10);
-							if (ImGui::Button("Test", { 100, 80 })) {
-								if(isPreview)
-								{
-									subRS->stop();//stop preview stream and go through the process to clean the stream.
-									std::this_thread::sleep_for(std::chrono::milliseconds(300));
-									isPreview = false;	
-								}
-								gCalculate_sts = -1;
-								gStartTesting = true;
-								subRS->stream_enabled[sfIdx.depthSIdx] = true;
-								subRS->stream_enabled[sfIdx.infra2SIdx] = true;
-								subRS->ui.selected_format_id[sfIdx.infra1SIdx] = sfIdx.infra1Y8FIdx;//change the infrared1 format from RGB to Y8
-								auto profiles = subRS->get_selected_profiles();
-								auto profilesColor = subColor->get_selected_profiles();
-								//get baseline while test
-								stream_profile left_s, right_s;
-								for (auto p : profiles)
-								{
-									if (p.stream_index() == 2 && p.stream_type() == RS2_STREAM_INFRARED)
-										right_s = p;
-									if (p.stream_index() == 0 && p.stream_type() == RS2_STREAM_DEPTH)
-										left_s = p;
-								}
-								auto extrin = (left_s).get_extrinsics_to(right_s);
-								baseline_mm = fabs(extrin.translation[0]) * 1000;  // baseline in mm
-								intrin = left_s.as<video_stream_profile>().get_intrinsics();
 
-								subRS->play(profiles);
-								std::this_thread::sleep_for(std::chrono::milliseconds(10));
-								subColor->play(profilesColor);
-
-								for (auto&& profile : profiles)
-									mViewer_model.streams[profile.unique_id()].dev = subRS;
-								for (auto&& profile : profilesColor)
-									mViewer_model.streams[profile.unique_id()].dev = subColor;
-#ifdef _WIN32
-								SetEvent(gStartTestingEvent);
-#else
-								pthread_mutex_lock(&testMtx);
-								testSts |= TEST;
-								pthread_cond_signal(&testCon);
-								pthread_mutex_unlock(&testMtx);
-#endif
-								gJoinTrigger = true;
-								showResult = false;
-							}
-							if (subRS->streaming && !isPreview)//test is running
-							{
-								if (!gStartTesting)//test complete
-								{
-									subRS->stop();
-									subColor->stop();
-									std::this_thread::sleep_for(std::chrono::milliseconds(300));
-									subRS->stream_enabled[sfIdx.depthSIdx] = false;
-									subRS->stream_enabled[sfIdx.infra2SIdx] = false;
-									showResult = true;
-								}
-							}
-						}*/
-								
 						ImGui::SetCursorPosX(70);
 						ImGui::SetCursorPosY(abs_pos.y + 120);
 
@@ -2036,7 +1329,6 @@ int main(int, char**) try
 						{
 							if (gCalculate_sts == -1)
 								gCalculate_sts = calTestResult(testResult);
-							//if (calTestResult(testResult))
 							if(gCalculate_sts == 1)
 							{
 								ImGui::GetWindowDrawList()->AddRectFilled({ abs_pos.x, abs_pos.y }, { abs_pos.x + 160, abs_pos.y + 150 }, ImColor(from_rgba(0, 255, 0, 0xff)));
@@ -2077,16 +1369,7 @@ int main(int, char**) try
             mViewer_model.show_no_device_overlay(selected_font, 50, panel_y + 50);
         }
 
-        /*ImGui::End();
-        ImGui::PopStyleVar();
-        ImGui::PopStyleColor();*/
-
-		bool calWPC = false;
-		//temporily comment out, waiting for more mature RMS calculation.
-		if (isStreaming)
-			calWPC = true;
 		points p;
-		//pointcloud pc;
 		texture_buffer* texture_frame = nullptr;
         // Fetch frames from queues
         for (auto&& device_model : device_models)
@@ -2099,10 +1382,10 @@ int main(int, char**) try
                         frame f;
 						if (queue.poll_for_frame(&f))//filter will be applied here if apply filiter is activated.
 						{
-							auto texture = mViewer_model.upload_frame(std::move(f), &p);
+							auto temp_texture = mViewer_model.upload_frame(std::move(f), &p);
 							//select RGB as texture
 							if (f.get_profile().format() == RS2_FORMAT_RGB8)
-								texture_frame = texture;
+								texture_frame = temp_texture;
 						}
                     }
                     catch (const rs2::error& ex)
@@ -2117,25 +1400,14 @@ int main(int, char**) try
                     }
                 });
             }
-
-		/*char temp[50];
-		sprintf(temp, "BEFORE GC");
-		log(RS2_LOG_SEVERITY_DEBUG, temp);
 		mViewer_model.gc_streams();
-		sprintf(temp, "AFTER GC");
-		log(RS2_LOG_SEVERITY_DEBUG, temp);*/
 		
 #pragma endregion UI
-
 		rect rect = { panel_width, panel_y, w - panel_width, (float)h - panel_y - output_height };
-		
-		//auto layout = mViewer_model.calc_layout(rect, calWPC);
 		auto layout = mViewer_model.calc_layout(rect, isStreaming);
 
-		//if (gStartTesting && calWPC)
 		if (isStreaming)
 		{
-			bool paused = false;
 			mViewer_model.show_3dviewer_header(font_14, layout[DUMMY_PC_STREAM_ID], paused);
 			//display point cloud inside the rect
 			mViewer_model.update_3d_camera(layout[DUMMY_PC_STREAM_ID], mouse, false);
@@ -2147,7 +1419,7 @@ int main(int, char**) try
 				video_frame vframe = _frame.as<video_frame>();
 				calPlane((const uint16_t*)vframe.get_data(), vframe.get_width(), vframe.get_height(), 0.001, &intrin, &(mViewer_model.roi_rect), angles);
 				ImGui::SetCursorPosX(0); ImGui::Text("Angle : "); getAngleSuggestion(angles, temp);
-				ImGui::SameLine(); ImGui::SetCursorPosX(col1+30); ImGui::Text("%s", temp);
+				ImGui::SetCursorPosX(col1); ImGui::Text("%s", temp);
 				if (gStartTesting)
 				{
 					ImGui::Text("Testing started");
@@ -2173,7 +1445,6 @@ int main(int, char**) try
 		glLoadIdentity();
 		glOrtho(0, w, h, 0, -1, +1);
 
-		//if(gStartTesting && calWPC)
 		if (isStreaming)
 			mViewer_model.display_3d_view(layout[DUMMY_PC_STREAM_ID]);
 
@@ -2187,7 +1458,6 @@ int main(int, char**) try
 
 			if (stream == DUMMY_PC_STREAM_ID)
 			{
-					
 				continue;
 			}
 
@@ -2210,61 +1480,6 @@ int main(int, char**) try
 				glEnd();
 			}
 
-			//three area testing, comment out to use percentage of whole area
-			/*if (stream == sfIdx.depthSIdx)//depth stream
-			{
-				GLfloat x = stream_rect.x + (stream_rect.w / 3);
-				GLfloat y = stream_rect.y + (stream_rect.h / 3);
-				GLfloat w = stream_rect.w / 3;
-				GLfloat h = stream_rect.h / 3;
-				glBegin(GL_LINE_STRIP);
-				glColor4f(1, 1, 1, 1);*/
-
-				/*
-				_____w_____|______w_____|_______w_______
-				|                       |              |
-				|                       |       UR     |
-				|        (x,y)__________|______________|
-				|          |            |              |
-				|          |     C      |              |
-				|          |____________|______________|
-				|                       |              |
-				|                       |       BR     |
-				|_______________________|______________|
-				*/
-				/*GLfloat drawEdgeOffset = stream_rect.w * gOffsetRatio;
-
-				//center rectangle
-				glVertex2f(x, y);
-				glVertex2f(x, y + h);
-				glVertex2f(x + w, y + h);
-				glVertex2f(x + w, y);
-				glVertex2f(x, y);
-				glEnd();
-
-				glBegin(GL_LINE_STRIP);
-				//upper right rectangle
-				glVertex2f(x + w, stream_rect.y);
-				//glVertex2f(x + (2 * w) - drawEdgeOffset, stream_rect.y);
-				//glVertex2f(x + (2 * w) - drawEdgeOffset, y);
-				glVertex2f(x + (2 * w) - gConfig.edgeOffset, stream_rect.y);
-				glVertex2f(x + (2 * w) - gConfig.edgeOffset, y);
-				glVertex2f(x + w, y);
-				glVertex2f(x + w, stream_rect.y);
-				glEnd();
-
-				glBegin(GL_LINE_STRIP);
-				//bottom right rectangle
-				glVertex2f(x + w, y + h);
-				//glVertex2f(x + (2 * w) - drawEdgeOffset, y + h);
-				//glVertex2f(x + (2 * w) - drawEdgeOffset, y + (2 * h));
-				glVertex2f(x + (2 * w) - gConfig.edgeOffset, y + h);
-				glVertex2f(x + (2 * w) - gConfig.edgeOffset, y + (2 * h));
-				glVertex2f(x + w, y + (2 * h));
-				glVertex2f(x + w, y + h);
-				glEnd();
-			}*/
-
 			if (gStartCapture)
 			{
 #ifdef _WIN32
@@ -2272,7 +1487,6 @@ int main(int, char**) try
 #else
 				std::string filename = resultFolder + "/" + device_models[0].dev.get_info(RS2_CAMERA_INFO_NAME) + "_" + device_models[0].dev.get_info(RS2_CAMERA_INFO_SERIAL_NUMBER) + "_" + stream_mv.dev->stream_display_names[stream] + "_" + std::to_string(testIdx);
 #endif
-
 				auto frame = stream_mv.texture->get_last_frame();
 				if (frame)
 				{
@@ -2284,8 +1498,6 @@ int main(int, char**) try
 						int h = frame.as<video_frame>().get_height();
 						depthImg = new unsigned short[w*h];
 						memcpy(depthImg, frame.get_data(), w*h * 2);
-						//temporily comment out, waiting for more mature RMS calculation.
-						//frameData[saveImgidx]._points = new points(mViewer_model.pc.get_points());
 						frameData[saveImgidx]._points = new points(p.get());
 						frameData[saveImgidx]._frame = new rs2::frame(colorRizer.colorize(frame));
 					}
@@ -2304,9 +1516,6 @@ int main(int, char**) try
 						testResult.csvFileName = resultFolder + "\\" + device_models[0].dev.get_info(RS2_CAMERA_INFO_NAME) + "_" + device_models[0].dev.get_info(RS2_CAMERA_INFO_SERIAL_NUMBER) + "_" + std::to_string(testIdx);
 						if (!ends_with(to_lower(testResult.csvFileName), ".csv")) testResult.csvFileName += ".csv";
 						calResultThread = new std::thread(calResultThreadFun, frameData[saveImgidx]._frame, depthImg, &testResult, baseline_mm, intrin);
-						/*char temp[50];
-						sprintf(temp, "calResultThread start");
-						log(RS2_LOG_SEVERITY_DEBUG, temp);*/
 #else
 						testResult.csvFileName = resultFolder + "/" + device_models[0].dev.get_info(RS2_CAMERA_INFO_NAME) + "_" + device_models[0].dev.get_info(RS2_CAMERA_INFO_SERIAL_NUMBER) + "_" + std::to_string(testIdx);
 						if (!ends_with(to_lower(testResult.csvFileName), ".csv")) testResult.csvFileName += ".csv";
@@ -2330,9 +1539,6 @@ int main(int, char**) try
 		//Means testing has ended, join all the thread
 		if (!gStartTesting && gJoinTrigger)
 		{
-			/*char temp[50];
-			sprintf(temp, "stop thread");
-			log(RS2_LOG_SEVERITY_DEBUG, temp);*/
 			gJoinTrigger = false;
 #ifdef _WIN32
 			ResetEvent(gSaveImageEvent);
@@ -2359,8 +1565,6 @@ int main(int, char**) try
 #endif
 			//
 			delete depthImg;
-			/*sprintf(temp, "end stop thread");
-			log(RS2_LOG_SEVERITY_DEBUG, temp);*/
 		}
 
 		// Metadata overlay windows shall be drawn after textures to preserve z-buffer functionality
@@ -2369,10 +1573,7 @@ int main(int, char**) try
 			if (mViewer_model.streams[kvp.first].metadata_displayed)
 				mViewer_model.streams[kvp.first].show_metadata(mouse);
 		}
-
-
 		mViewer_model.not_model.draw(font_14, w, h);
-
 		mViewer_model.popup_if_error(selected_font, error_message);
 
 		glMatrixMode(GL_PROJECTION);
@@ -2384,6 +1585,15 @@ int main(int, char**) try
 
         // Yeild the CPU
         std::this_thread::sleep_for(std::chrono::milliseconds(10));
+
+		if (JSONErr)
+		{
+			if (errorCount++ > 1)
+			{
+				std::this_thread::sleep_for(std::chrono::seconds(3));
+				break;
+			}
+		}
     }
 
 #ifdef _WIN32

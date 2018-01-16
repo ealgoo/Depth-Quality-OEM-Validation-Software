@@ -6,6 +6,7 @@
 		"PostProcessing": "True",
 		"RMSFittingPlanePassRate": 2,
 		"RMSSubpixelPassRate": 0.15,
-		"ROIPercentage": 40
+		"ROIPercentage": 40,
+		"MaxAngle": 5
 	}
 }

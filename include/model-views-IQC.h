@@ -5,8 +5,6 @@
 #include <librealsense2/rs.hpp>
 
 #include "rendering.h"
-//#include "ux-window.h"
-//#include "parser.hpp"
 #include <string>
 #include <map>
 #include <fstream>
@@ -27,8 +25,6 @@
 
 #include "imgui-fonts-karla.hpp"
 #include "imgui-fonts-fontawesome.hpp"
-
-//#include "realsense-ui-advanced-mode.h"
 
 #define DUMMY_PC_STREAM_ID 55
 
@@ -346,8 +342,6 @@ namespace rs2
         void stop_recording();
         void pause_record();
         void resume_record();
-        //int draw_playback_panel(ImFont* font, viewer_model& view);
-        //void draw_advanced_mode_tab();
         void draw_controls(float panel_width, float panel_height,
             ImFont *font1, ImFont *font2,
             const mouse_info &mouse,
@@ -377,9 +371,6 @@ namespace rs2
         std::vector<std::pair<std::string, std::string>> infos;
         std::vector<std::string> restarting_device_info;
     private:
-        //int draw_seek_bar();
-        //int draw_playback_controls(ImFont* font, viewer_model& view);
-        //advanced_mode_control amc;
         std::string pretty_time(std::chrono::nanoseconds duration);
 
         void play_defaults(viewer_model& view);
@@ -478,14 +469,6 @@ namespace rs2
                 t.join();
             }
         }
-
-		//cary_test
-		/*void start() {
-			pc = new pointcloud();
-			keep_calculating_pointcloud = true;
-			t = new std::thread([this]() {render_loop(); });
-		}*/
-		//cary_test
 
         void push_frame(frame f)
         {

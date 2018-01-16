@@ -2643,6 +2643,8 @@ namespace rs2
 
     void viewer_model::render_3d_view(const rect& viewer_rect, texture_buffer* texture, rs2::points points)
     {
+		if (texture == nullptr)
+			return;
 		if (points)
 			last_points = points;
 		if (texture)
@@ -3017,184 +3019,6 @@ namespace rs2
         _recorder->resume();
     }
 
-    /*int device_model::draw_playback_controls(ImFont* font, viewer_model& viewer)
-    {
-        auto p = dev.as<playback>();
-        rs2_playback_status current_playback_status = p.current_status();
-
-        ImGui::PushFont(font);
-        ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, { 10,0 });
-        const float button_dim = 30.f;
-        const bool supports_playback_step = false;
-
-
-        //////////////////// Step Backwards Button ////////////////////
-        std::string label = to_string() << u8"\uf048" << "##Step Backwards " << id;
-
-        if (ImGui::ButtonEx(label.c_str(), { button_dim, button_dim }, supports_playback_step ? 0 : ImGuiButtonFlags_Disabled))
-        {
-            //p.skip_frames(1);
-        }
-
-
-        if (ImGui::IsItemHovered())
-        {
-            std::string tooltip = to_string() << "Step Backwards" << (supports_playback_step ? "" : "(Not available)");
-            ImGui::SetTooltip("%s", tooltip.c_str());
-        }
-        ImGui::SameLine();
-        //////////////////// Step Backwards Button ////////////////////
-
-
-        //////////////////// Stop Button ////////////////////
-        label = to_string() << u8"\uf04d" << "##Stop Playback " << id;
-
-        if (ImGui::ButtonEx(label.c_str(), { button_dim, button_dim }))
-        {
-            bool prev = _playback_repeat;
-            _playback_repeat = false;
-            p.stop();
-            _playback_repeat = prev;
-        }
-        if (ImGui::IsItemHovered())
-        {
-            std::string tooltip = to_string() << "Stop Playback";
-            ImGui::SetTooltip("%s", tooltip.c_str());
-        }
-        ImGui::SameLine();
-        //////////////////// Stop Button ////////////////////
-
-
-
-        //////////////////// Pause/Play Button ////////////////////
-        if (current_playback_status == RS2_PLAYBACK_STATUS_PAUSED || current_playback_status == RS2_PLAYBACK_STATUS_STOPPED)
-        {
-            label = to_string() << u8"\uf04b" << "##Play " << id;
-            if (ImGui::ButtonEx(label.c_str(), { button_dim, button_dim }))
-            {
-                if (current_playback_status == RS2_PLAYBACK_STATUS_STOPPED)
-                {
-                    play_defaults(viewer);
-                }
-                else
-                {
-                    p.resume();
-                    for (auto&& s : subdevices)
-                    {
-                        if (s->streaming)
-                            s->resume();
-                    }
-                }
-
-            }
-            if (ImGui::IsItemHovered())
-            {
-                ImGui::SetTooltip(current_playback_status == RS2_PLAYBACK_STATUS_PAUSED ? "Resume Playback" : "Start Playback");
-            }
-        }
-        else
-        {
-            label = to_string() << u8"\uf04c" << "##Pause Playback " << id;
-            if (ImGui::ButtonEx(label.c_str(), { button_dim, button_dim }))
-            {
-                p.pause();
-                for (auto&& s : subdevices)
-                {
-                    if (s->streaming)
-                        s->pause();
-                }
-            }
-            if (ImGui::IsItemHovered())
-            {
-                ImGui::SetTooltip("Pause Playback");
-            }
-        }
-
-        ImGui::SameLine();
-        //////////////////// Pause/Play Button ////////////////////
-
-
-
-
-        //////////////////// Step Forward Button ////////////////////
-        label = to_string() << u8"\uf051" << "##Step Forward " << id;
-        if (ImGui::ButtonEx(label.c_str(), { button_dim, button_dim }, supports_playback_step ? 0 : ImGuiButtonFlags_Disabled))
-        {
-            //p.skip_frames(-1);
-        }
-        if (ImGui::IsItemHovered())
-        {
-            std::string tooltip = to_string() << "Step Forward" << (supports_playback_step ? "" : "(Not available)");
-            ImGui::SetTooltip("%s", tooltip.c_str());
-        }
-        ImGui::SameLine();
-        //////////////////// Step Forward Button ////////////////////
-
-
-
-
-        /////////////////// Repeat Button /////////////////////
-        if (_playback_repeat)
-        {
-            ImGui::PushStyleColor(ImGuiCol_Text, light_blue);
-            ImGui::PushStyleColor(ImGuiCol_TextSelectedBg, light_blue);
-        }
-        else
-        {
-            ImGui::PushStyleColor(ImGuiCol_Text, white);
-            ImGui::PushStyleColor(ImGuiCol_TextSelectedBg, white);
-        }
-        label = to_string() << u8"\uf0e2" << "##Repeat " << id;
-        if (ImGui::ButtonEx(label.c_str(), { button_dim, button_dim }))
-        {
-            _playback_repeat = !_playback_repeat;
-        }
-        if (ImGui::IsItemHovered())
-        {
-            std::string tooltip = to_string() << (_playback_repeat ? "Disable " : "Enable ") << "Repeat ";
-            ImGui::SetTooltip("%s", tooltip.c_str());
-        }
-        ImGui::PopStyleColor(2);
-
-        ImGui::SameLine();
-        /////////////////// Repeat Button /////////////////////
-
-
-        ImGui::PopStyleVar();
-
-        //////////////////// Speed combo box ////////////////////
-        auto pos = ImGui::GetCursorPos();
-        ImGui::SetCursorPos({ 200.0f, pos.y + 3 });
-        ImGui::PushItemWidth(100);
-
-        ImGui::PushStyleColor(ImGuiCol_FrameBg, sensor_bg);
-        ImGui::PushStyleColor(ImGuiCol_ButtonHovered, sensor_bg);
-
-        label = to_string() << "## " << id;
-        if (ImGui::Combo(label.c_str(), &playback_speed_index, "Speed: x0.25\0Speed: x0.5\0Speed: x1\0Speed: x1.5\0Speed: x2\0\0"))
-        {
-            float speed = 1;
-            switch (playback_speed_index)
-            {
-            case 0: speed = 0.25f; break;
-            case 1: speed = 0.5f; break;
-            case 2: speed = 1.0f; break;
-            case 3: speed = 1.5f; break;
-            case 4: speed = 2.0f; break;
-            default:
-                throw std::runtime_error(to_string() << "Speed #" << playback_speed_index << " is unhandled");
-            }
-            p.set_playback_speed(speed);
-        }
-
-        ImGui::PopStyleColor(2);
-
-        //////////////////// Speed combo box ////////////////////
-        ImGui::PopFont();
-
-        return 35;
-    }*/
-
     std::string device_model::pretty_time(std::chrono::nanoseconds duration)
     {
         using namespace std::chrono;
@@ -3213,66 +3037,6 @@ namespace rs2
             //std::setfill('0') << std::setw(3) << ms.count();
         return stream.str();
     }
-
-    /*int device_model::draw_seek_bar()
-    {
-        auto pos = ImGui::GetCursorPos();
-
-        auto p = dev.as<playback>();
-        rs2_playback_status current_playback_status = p.current_status();
-        int64_t playback_total_duration = p.get_duration().count();
-        auto progress = p.get_position();
-        double part = (1.0 * progress) / playback_total_duration;
-        seek_pos = static_cast<int>(std::max(0.0, std::min(part, 1.0)) * 100);
-
-        if (seek_pos != 0 && p.current_status() == RS2_PLAYBACK_STATUS_STOPPED)
-        {
-            seek_pos = 0;
-        }
-        float seek_bar_width = 290.0f;
-        ImGui::PushItemWidth(seek_bar_width);
-        std::string label1 = "## " + id;
-        if (ImGui::SeekSlider(label1.c_str(), &seek_pos, ""))
-        {
-            //Seek was dragged
-            auto duration_db = std::chrono::duration_cast<std::chrono::duration<double, std::nano>>(p.get_duration());
-            auto single_percent = duration_db.count() / 100;
-            auto seek_time = std::chrono::duration<double, std::nano>(seek_pos * single_percent);
-            p.seek(std::chrono::duration_cast<std::chrono::nanoseconds>(seek_time));
-        }
-
-        ImGui::SetCursorPos({ pos.x, pos.y + 17 });
-
-        std::string time_elapsed = pretty_time(std::chrono::nanoseconds(progress));
-        std::string duration_str = pretty_time(std::chrono::nanoseconds(playback_total_duration));
-        ImGui::Text("%s", time_elapsed.c_str());
-        ImGui::SameLine();
-        float pos_y = ImGui::GetCursorPosY();
-
-        ImGui::SetCursorPos({ pos.x + seek_bar_width - 41 , pos_y });
-        ImGui::Text("%s", duration_str.c_str());
-
-        return 50;
-    }
-
-    int device_model::draw_playback_panel(ImFont* font, viewer_model& view)
-    {
-        ImGui::PushStyleColor(ImGuiCol_Button, sensor_bg);
-        ImGui::PushStyleColor(ImGuiCol_Text, light_grey);
-        ImGui::PushStyleColor(ImGuiCol_PopupBg, almost_white_bg);
-        ImGui::PushStyleColor(ImGuiCol_HeaderHovered, from_rgba(0, 0xae, 0xff, 255));
-        ImGui::PushStyleColor(ImGuiCol_TextSelectedBg, white);
-
-
-        auto pos = ImGui::GetCursorPos();
-        auto controls_height = draw_playback_controls(font, view);
-        ImGui::SetCursorPos({ pos.x + 8, pos.y + controls_height });
-        auto seek_bar_height = draw_seek_bar();
-
-        ImGui::PopStyleColor(5);
-        return controls_height + seek_bar_height;
-
-    }*/
 
     std::vector<std::string> get_device_info(const device& dev, bool include_location)
     {
@@ -3346,103 +3110,6 @@ namespace rs2
         }
         return clicked;
     }
-
-    /*void device_model::draw_advanced_mode_tab()
-    {
-        using namespace rs400;
-        ImGui::PushStyleColor(ImGuiCol_TextSelectedBg, { 0.9f, 0.9f, 0.9f, 1 });
-
-        auto is_advanced_mode = dev.is<advanced_mode>();
-        if (ImGui::TreeNode("Advanced Mode"))
-        {
-            try
-            {
-                if (!is_advanced_mode)
-                {
-                    // TODO: Why are we showing the tab then??
-                    ImGui::TextColored(redish, "Selected device does not offer\nany advanced settings");
-                }
-                else
-                {
-                    auto advanced = dev.as<advanced_mode>();
-                    if (advanced.is_enabled())
-                    {
-                        static bool show_dialog = false;
-                        static bool disable_approved = true;
-                        if (allow_remove)
-                        {
-                            if (ImGui::Button("Disable Advanced Mode", ImVec2{ 226, 0 }))
-                            {
-                                show_dialog = true;
-                                disable_approved = false;
-                            }
-
-                            if (ImGui::IsItemHovered())
-                            {
-                                ImGui::SetTooltip("Disabling advanced mode will reset depth generation to factory settings\nThis will not affect calibration");
-                            }
-
-                            if (show_dialog &&
-                                yes_no_dialog("Advanced Mode", "Disable Advanced Mode", disable_approved))
-                            {
-                                if (disable_approved)
-                                {
-                                    advanced.toggle_advanced_mode(false);
-                                    restarting_device_info = get_device_info(dev, false);
-                                }
-                                show_dialog = false;
-                            }
-
-                            if (ImGui::IsItemHovered())
-                            {
-                                ImGui::SetTooltip("Disabling advanced mode will reset depth generation to factory settings\nThis will not affect calibration");
-                            }
-                            draw_advanced_mode_controls(advanced, amc, get_curr_advanced_controls);
-                        }
-                    }
-                    else
-                    {
-                        if (allow_remove)
-                        {
-                            static bool show_dialog = false;
-                            static bool enable_approved = true;
-                            if (ImGui::Button("Enable Advanced Mode", ImVec2{ 226, 0 }))
-                            {
-                                show_dialog = true;
-                                enable_approved = false;
-                            }
-
-                            if (ImGui::IsItemHovered())
-                            {
-                                ImGui::SetTooltip("Advanced mode is a persistent camera state unlocking calibration formats and depth generation controls\nYou can always reset the camera to factory defaults by disabling advanced mode");
-                            }
-
-                            if (show_dialog &&
-                                yes_no_dialog("Advanced Mode", "Enable Advanced Mode", enable_approved))
-                            {
-                                if (enable_approved)
-                                {
-                                    advanced.toggle_advanced_mode(true);
-                                    restarting_device_info = get_device_info(dev, false);
-                                }
-                                show_dialog = false;
-                            }
-                        }
-
-                        ImGui::TextColored(redish, "Device is not in advanced mode!\nTo access advanced functionality\nclick \"Enable Advanced Mode\"");
-                    }
-                }
-            }
-            catch (...)
-            {
-                ImGui::TextColored(redish, "Couldn't fetch Advanced Mode settings");
-            }
-
-            ImGui::TreePop();
-        }
-
-        ImGui::PopStyleColor();
-    }*/
 
     void device_model::draw_controls(float panel_width, float panel_height,
         ImFont *font1, ImFont *font2,
@@ -3546,51 +3213,6 @@ namespace rs2
                 }
             }
 
-            /*if (auto adv = dev.as<advanced_mode>())
-            {
-                try
-                {
-                    ImGui::Separator();
-
-                    if (ImGui::Selectable("Load Settings", false, ImGuiSelectableFlags_SpanAllColumns))
-                    {
-                        auto ret = file_dialog_open(open_file, "JavaScript Object Notation (JSON)\0*.json\0", NULL, NULL);
-                        if (ret)
-                        {
-                            std::ifstream t(ret);
-                            std::string str((std::istreambuf_iterator<char>(t)),
-                                std::istreambuf_iterator<char>());
-
-                            adv.load_json(str);
-                            get_curr_advanced_controls = true;
-                        }
-                    }
-
-                    if (ImGui::Selectable("Save Settings", false, ImGuiSelectableFlags_SpanAllColumns))
-                    {
-                        auto ret = file_dialog_open(save_file, "JavaScript Object Notation (JSON)\0*.json\0", NULL, NULL);
-
-                        if (ret)
-                        {
-                            std::string filename = ret;
-                            if (!ends_with(to_lower(filename), ".json")) filename += ".json";
-
-                            std::ofstream out(filename);
-                            out << adv.serialize_json();
-                            out.close();
-                        }
-                    }
-                }
-                catch (const error& e)
-                {
-                    error_message = error_to_string(e);
-                }
-                catch (const std::exception& e)
-                {
-                    error_message = e.what();
-                }
-            }*/
-
             if (allow_remove)
             {
                 ImGui::Separator();
@@ -3635,23 +3257,6 @@ namespace rs2
         ImGui::SetCursorPos({ 33, pos.y + panel_height - 9 });
         ImGui::PushStyleColor(ImGuiCol_Text, from_rgba(0xc3, 0xd5, 0xe5, 0xff));
 
-        /*int playback_control_panel_height = 0;
-        if (auto p = dev.as<playback>())
-        {
-            auto full_path = p.file_name();
-            auto filename = get_file_name(full_path);
-
-            ImGui::Text("File: \"%s\"", filename.c_str());
-            if (ImGui::IsItemHovered())
-                ImGui::SetTooltip("%s", full_path.c_str());
-
-            auto playback_panel_pos = ImVec2{ 0, pos.y + panel_height + 18 };
-            ImGui::SetCursorPos(playback_panel_pos);
-            playback_panel_pos.y = draw_playback_panel(font1, viewer);
-            playback_control_panel_height += (int)playback_panel_pos.y;
-        }
-
-        ImGui::SetCursorPos({ 0, pos.y + header_h + playback_control_panel_height });*/
         pos = ImGui::GetCursorPos();
 
         int info_control_panel_height = 0;
@@ -3762,11 +3367,7 @@ namespace rs2
                     ImGui::TreePop();
                 }
 
-                /*if (dev.is<advanced_mode>() && sub->s.is<depth_sensor>())
-                    draw_advanced_mode_tab();*/
-
                 ImGui::SetCursorPosY(ImGui::GetCursorPosY() + 5);
-
                 ImGui::TreePop();
             }
 
@@ -3783,63 +3384,6 @@ namespace rs2
         ImGui::PopStyleColor(2);
         ImGui::PopFont();
     }
-
-    /*void viewer_model::draw_viewport(const rect& viewer_rect, ux_window& window, int devices, std::string& error_message)
-    {
-        if (!is_3d_view)
-        {
-            render_2d_view(viewer_rect, window,
-                get_output_height(), window.get_font(), window.get_large_font(),
-                devices, window.get_mouse(), error_message);
-        }
-        else
-        {
-            if (paused)
-                show_paused_icon(window.get_large_font(), panel_width + 15, panel_y + 15 + 32, 0);
-
-            show_3dviewer_header(window.get_font(), viewer_rect, paused);
-
-            update_3d_camera(viewer_rect, window.get_mouse());
-
-            auto ratio = (float)window.width() / window.framebuf_width();
-            render_3d_view(viewer_rect, window.get_scale_factor() / ratio);
-        }
-
-        if (ImGui::IsKeyPressed(' '))
-        {
-            if (paused)
-            {
-                for (auto&& s : streams)
-                {
-                    if (s.second.dev)
-                    {
-                        s.second.dev->resume();
-                        if (s.second.dev->dev.is<playback>())
-                        {
-                            auto p = s.second.dev->dev.as<playback>();
-                            p.resume();
-                        }
-                    }
-                }
-            }
-            else
-            {
-                for (auto&& s : streams)
-                {
-                    if (s.second.dev)
-                    {
-                        s.second.dev->pause();
-                        if (s.second.dev->dev.is<playback>())
-                        {
-                            auto p = s.second.dev->dev.as<playback>();
-                            p.pause();
-                        }
-                    }
-                }
-            }
-            paused = !paused;
-        }
-    }*/
 
     std::map<int, rect> viewer_model::get_interpolated_layout(const std::map<int, rect>& l)
     {
