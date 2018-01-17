@@ -1,7 +1,7 @@
 {
     "config":{
 	    "FillRatePassPercentage": 97.9,
-		"AccuracyPassPercentage": 2,
+		"AccuracyPassPercentage": 98,
 	    "TestDistance": 1160,
 		"PostProcessing": "True",
 		"RMSFittingPlanePassRate": 2,

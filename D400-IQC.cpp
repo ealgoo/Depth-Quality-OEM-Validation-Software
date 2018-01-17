@@ -46,7 +46,7 @@ using namespace nlohmann;
 #define TESTING_TIME	6
 #define MAJOR_VERSION 1
 #define MINOR_VERSION 0
-#define PATCH_VERSION 10
+#define PATCH_VERSION 11
 
 bool gStartCapture = false, gStartTesting = false, gJoinTrigger = false;
 region_of_interest gRoi = { -1, -1, -1, -1 };
@@ -65,6 +65,7 @@ unsigned int testSts = 0;
 unsigned int saveImgSts = 0;
 #define TEST 1
 #define SAVEIMG 1
+#define SAVECOMP 2
 #define ENDTEST 4
 #endif
 
@@ -104,6 +105,7 @@ void testingThreadFun() {
 #else
 void* testingThreadFun(void* context){
 	pthread_mutex_lock(&testMtx);
+        int saveCount = 0;
 	while(true)
 	{
 		pthread_cond_wait(&testCon, &testMtx);
@@ -111,9 +113,19 @@ void* testingThreadFun(void* context){
 		{
 			std::this_thread::sleep_for(std::chrono::seconds(TIME_TO_CAPTURE));
 			gStartCapture = true;
-			std::this_thread::sleep_for(std::chrono::seconds(TESTING_TIME - TIME_TO_CAPTURE));
-			gStartTesting = false;
+                        //std::this_thread::sleep_for(std::chrono::seconds(TESTING_TIME - TIME_TO_CAPTURE));
+                        //gStartTesting = false;
 		}
+                else if(testSts & SAVECOMP)
+                {
+                    saveCount++;
+                    if (saveCount == 4)
+                    {
+                            gStartTesting = false;
+                            saveCount = 0;
+                    }
+
+                }
 		else if(testSts & ENDTEST)
 			break;
 		testSts = 0;
@@ -123,12 +135,6 @@ void* testingThreadFun(void* context){
 #endif
 
 struct test_result {
-	enum BLOCK{
-		C,
-		UR,
-		BR,
-		COUNT
-	};
 
 	float fillRate;
 	float accuracy;
@@ -195,7 +201,7 @@ struct snapshot_metrics
 	rs2::region_of_interest roi;
 
 	float distance;
-	angles angles;
+        angles _angles;
 
 	plane p;
 	std::array<float3, 4> plane_corners;
@@ -280,7 +286,7 @@ void* calResultThreadFun(void* ctx) {
 	result->rmsFittingPlane = res.data[snapshot_metrics::FITTING_RMS];
 	result->rmsSubpixel = res.data[snapshot_metrics::SUBPIXEL];
 	result->accuracy = res.data[snapshot_metrics::ACCURACY];
-	result->angle = res.angles.angle;
+        result->angle = res._angles.angle;
 	drawTestPicture(_frame->as<video_frame>(), result);
 	saveResult(result);
 #ifdef _WIN32
@@ -290,6 +296,7 @@ void* calResultThreadFun(void* ctx) {
 	pthread_cond_signal(&saveImgCon);
 	pthread_cond_signal(&saveImgCon);
 	pthread_cond_signal(&saveImgCon);
+        pthread_cond_signal(&saveImgCon);
 	pthread_mutex_unlock(&saveImgMtx);
 #endif
 }
@@ -334,7 +341,14 @@ void* saveFrameThreadFun(void* _data){
 		data.not_model->add_notification({ to_string() << "Snapshot was saved to " << filenamePng.data(),
 		0, RS2_LOG_SEVERITY_INFO,
 		RS2_NOTIFICATION_CATEGORY_UNKNOWN_ERROR});
+#ifdef _WIN32
 		SetEvent(gSaveFinishEvent);
+#else
+                pthread_mutex_lock(&testMtx);
+                testSts |= SAVECOMP;
+                pthread_cond_signal(&testCon);
+                pthread_mutex_unlock(&testMtx);
+#endif
 		/*if (data._points != nullptr)
 		{
 			//export_to_ply(filenamePly, *(data.not_model), *data._points, frame);
@@ -359,7 +373,7 @@ bool calTestResult(test_result result)
 {
 	if (result.fillRate * 100.0f < gConfig.fillRatePassP)
 		return false;
-	if (abs(result.accuracy) < gConfig.accuracyPassP)
+	if (abs(result.accuracy) > gConfig.accuracyPassP)
 		return false;
 	if (result.rmsFittingPlane > gConfig.rmsFittingPlanePassRate)
 		return false;
@@ -409,7 +423,7 @@ void setFontForWindow(ImFont*& selected_font, ImFont* _18Font, ImFont* _14Font)
 }
 
 
-#pragma region RMS_Cal
+#pragma region Depth_Result_Cal
 plane plane_from_point_and_normal(const rs2::float3& point, const rs2::float3& normal)
 {
 	return{ normal.x, normal.y, normal.z, -(normal.x*point.x + normal.y*point.y + normal.z*point.z) };
@@ -633,7 +647,7 @@ snapshot_metrics analyze_depth_image(const uint16_t* data, int w, int h, float u
 	std::array<float3, 4>* corners = new std::array<float3, 4>(); 
 	plane* p = new plane();
 
-	calPlane(data, w, h, units, intrin, corners, result.angles, roi_pixels, p);
+        calPlane(data, w, h, units, intrin, corners, result._angles, roi_pixels, p);
 
 	// Calculate intersection point of the camera's optical axis with the plane fit in camera's CS
 	float3 plane_fit_pivot = approximate_intersection(*p, intrin, intrin->ppx, intrin->ppy);
@@ -652,7 +666,7 @@ snapshot_metrics analyze_depth_image(const uint16_t* data, int w, int h, float u
 	delete p, roi_pixels, corners;
 	return result;
 }
-#pragma endregion RMS_Cal
+#pragma endregion Depth_Result_Cal
 
 void startStreams(float& baseline, rs2_intrinsics& intrin, stream_format_idx sfIdx, std::shared_ptr<subdevice_model>& depthDev, std::shared_ptr<subdevice_model>& colorDev, viewer_model& viewerModel) {
 	if (depthDev->streaming)
@@ -864,13 +878,13 @@ int main(int, char**) try
 					auto prev_size = list.size();
 					list = ctx.query_devices();
 
-					auto dev = [&]() {
+                                        auto dev = [&]() {
 						for (size_t i = 0; i < list.size(); i++)
 						{
-							if (list[i].supports(RS2_CAMERA_INFO_NAME) &&
-								std::string(list[i].get_info(RS2_CAMERA_INFO_NAME)) != "Platform Camera")
-								return list[i];
-						}
+                                                        if (list[i].supports(RS2_CAMERA_INFO_NAME) &&
+                                                                std::string(list[i].get_info(RS2_CAMERA_INFO_NAME)) != "Platform Camera")
+                                                                return list[i];
+                                                }
 						return device();
 					}();
 
@@ -884,43 +898,42 @@ int main(int, char**) try
 						mViewer_model.not_model.add_log(to_string() << model.dev.get_info(RS2_CAMERA_INFO_NAME) << " was selected as a default device");
 					}
 
-					devs.clear();
-					for (auto&& sub : list)
-					{
-						devs.push_back(sub);
-						for (auto&& s : sub.query_sensors())
-						{
-							s.set_notifications_callback([&](const notification& n)
-							{
-								mViewer_model.not_model.add_notification({ n.get_description(), n.get_timestamp(), n.get_severity(), n.get_category() });
-							});
-						}
-					}
+                                        devs.clear();
 
+										if (dev.get() == nullptr)
+											continue;
+                                        devs.push_back(dev);
+                                        for (auto&& s : dev.query_sensors())
+                                        {
+                                                s.set_notifications_callback([&](const notification& n)
+                                                {
+                                                        mViewer_model.not_model.add_notification({ n.get_description(), n.get_timestamp(), n.get_severity(), n.get_category() });
+                                                });
+                                        }
 
-					device_to_remove = nullptr;
-					while (true)
-					{
-						for (auto&& dev_model : device_models)
-						{
-							bool still_around = false;
-							for (auto&& dev : devs)
-								if (get_device_name(dev_model.dev) == get_device_name(dev))
-									still_around = true;
-							if (!still_around) {
-								for (auto&& s : dev_model.subdevices)
-									s->streaming = false;
-								device_to_remove = &dev_model;
-							}
-						}
-						if (device_to_remove)
-						{
-							device_models.erase(std::find_if(begin(device_models), end(device_models),
-								[&](const device_model& other) { return get_device_name(other.dev) == get_device_name(device_to_remove->dev); }));
-							device_to_remove = nullptr;
-						}
-						else break;
-					}
+                                        device_to_remove = nullptr;
+                                        while (true)
+                                        {
+                                                for (auto&& dev_model : device_models)
+                                                {
+                                                        bool still_around = false;
+                                                        for (auto&& dev : devs)
+                                                                if (get_device_name(dev_model.dev) == get_device_name(dev))
+                                                                        still_around = true;
+                                                        if (!still_around) {
+                                                                for (auto&& s : dev_model.subdevices)
+                                                                        s->streaming = false;
+                                                                device_to_remove = &dev_model;
+                                                        }
+                                                }
+                                                if (device_to_remove)
+                                                {
+                                                        device_models.erase(std::find_if(begin(device_models), end(device_models),
+                                                                [&](const device_model& other) { return get_device_name(other.dev) == get_device_name(device_to_remove->dev); }));
+                                                        device_to_remove = nullptr;
+                                                }
+                                                else break;
+                                        }
 				}
 				catch (const rs2::error& e)
 				{
