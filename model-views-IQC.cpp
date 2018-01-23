@@ -197,19 +197,8 @@ namespace rs2
     }
 
     void export_to_ply(const std::string& fname, notifications_model& ns, points p, video_frame texture)
-	//void export_to_ply(const std::string& fname, notifications_model& ns, frameset frames, video_frame texture)
     {
 		std::thread([&ns, texture, fname, p]() mutable {
-
-			/*points p;
-
-			for (auto&& f : frames)
-			{
-				if (p = f.as<points>())
-				{
-					break;
-				}
-			}*/
 
 			if (p)
 			{
@@ -220,81 +209,6 @@ namespace rs2
 					RS2_NOTIFICATION_CATEGORY_UNKNOWN_ERROR });
 			}
 		}).detach();
-        /*std::thread([&ns, points, texture, fname]() {
-            std::string texfname(fname);
-            texfname += ".png";
-
-            const auto vertices = points.get_vertices();
-            const auto texcoords = points.get_texture_coordinates();
-            const auto tex = reinterpret_cast<const uint8_t*>(texture.get_data());
-            std::vector<vertex> new_vertices;
-            //std::vector<texture_coordinate> new_texcoords;
-            std::vector<std::tuple<uint8_t, uint8_t, uint8_t>> new_tex;
-            new_vertices.reserve(points.size());
-            //new_texcoords.reserve(points.size());
-            new_tex.reserve(points.size());
-
-            for (int i = 0; i < points.size(); ++i)
-                if (std::abs(vertices[i].x) >= 1e-6 || std::abs(vertices[i].y) >= 1e-6 || std::abs(vertices[i].z) >= 1e-6)
-                {
-                    new_vertices.push_back(vertices[i]);
-                    if (texture)
-                    {
-                        //new_texcoords.push_back(texcoords[i]);
-                        auto color = get_texcolor(texture, texcoords[i]);
-                        new_tex.push_back(color);
-                    }
-
-                }
-
-            std::ofstream out(fname);
-            out << "ply\n";
-            out << "format binary_little_endian 1.0\n" /*"format ascii 1.0\n"*/;
-            /*out << "comment pointcloud saved from Realsense Viewer\n";
-            //if (texture) out << "comment TextureFile " << get_file_name(texfname) << "\n";
-            out << "element vertex " << new_vertices.size() << "\n";
-            out << "property float" << sizeof(float) * 8 << " x\n";
-            out << "property float" << sizeof(float) * 8 << " y\n";
-            out << "property float" << sizeof(float) * 8 << " z\n";
-            if (texture)
-            {
-                //out << "property float" << sizeof(float) * 8 << " u\n";
-                //out << "property float" << sizeof(float) * 8 << " v\n";
-                out << "property uchar red\n";
-                out << "property uchar green\n";
-                out << "property uchar blue\n";
-            }
-            out << "end_header\n";
-            out.close();
-
-            out.open(fname, std::ios_base::app | std::ios_base::binary);
-            for (int i = 0; i < new_vertices.size(); ++i)
-            {
-                // we assume little endian architecture on your device
-                out.write(reinterpret_cast<const char*>(&(new_vertices[i].x)), sizeof(float));
-                out.write(reinterpret_cast<const char*>(&(new_vertices[i].y)), sizeof(float));
-                out.write(reinterpret_cast<const char*>(&(new_vertices[i].z)), sizeof(float));
-                //                out << new_vertices[i].x << ' ' << new_vertices[i].y << ' ' << new_vertices[i].z;
-                if (texture)
-                {
-                    //out.write(reinterpret_cast<const char*>(&(new_texcoords[i].u)), sizeof(float));
-                    //out.write(reinterpret_cast<const char*>(&(new_texcoords[i].v)), sizeof(float));
-                    out.write(reinterpret_cast<const char*>(&(std::get<0>(new_tex[i]))), sizeof(uint8_t));
-                    out.write(reinterpret_cast<const char*>(&(std::get<1>(new_tex[i]))), sizeof(uint8_t));
-                    out.write(reinterpret_cast<const char*>(&(std::get<2>(new_tex[i]))), sizeof(uint8_t));
-                    //                    out << std::hex << ' ' << std::get<0>(new_tex[i]) << ' ' << std::get<1>(new_tex[i]) << ' ' << std::get<2>(new_tex[i]);
-                }
-                //                out << '\n';
-            }*/
-
-            /* save texture to texfname */
-            //if (texture) stbi_write_png(texfname.data(), texture.get_width(), texture.get_height(), texture.get_bytes_per_pixel(), texture.get_data(), texture.get_width() * texture.get_bytes_per_pixel());
-
-           /* ns.add_notification({ to_string() << "Finished saving 3D view " << (texture ? "to " : "without texture to ") << fname,
-                std::chrono::duration_cast<std::chrono::duration<double,std::micro>>(std::chrono::high_resolution_clock::now().time_since_epoch()).count(),
-                RS2_LOG_SEVERITY_INFO,
-                RS2_NOTIFICATION_CATEGORY_UNKNOWN_ERROR });
-        }).detach();*/
     }
 
     const char* file_dialog_open(file_dialog_mode flags, const char* filters, const char* default_path, const char* default_name)
@@ -580,60 +494,6 @@ namespace rs2
             range.step == 1.0f;
     }
 
-    void viewer_model::draw_histogram_options(float depth_units, const subdevice_model& sensor)
-    {
-        /*std::vector<int> depth_streams_ids;
-        for (auto&& s : streams)
-        {
-            if (s.second.dev.get() == &sensor && s.second.profile.stream_type() == RS2_STREAM_DEPTH)
-            {
-                depth_streams_ids.push_back(s.second.profile.unique_id());
-            }
-        }
-
-        if (!depth_streams_ids.size()) return;
-
-        auto&& first_depth_stream = streams[depth_streams_ids.front()];
-        bool equalize = first_depth_stream.texture->equalize;
-
-        if (ImGui::Checkbox("Histogram Equalization", &equalize))
-        {
-            for (auto id : depth_streams_ids)
-            {
-                streams[id].texture->equalize = equalize;
-                streams[id].texture->min_depth = 0;
-                streams[id].texture->max_depth = 6 / depth_units;
-            }
-        }
-
-        if (!equalize)
-        {
-            auto val = first_depth_stream.texture->min_depth * depth_units;
-            if (ImGui::SliderFloat("##Near (m)", &val, 0, 16))
-            {
-                for (auto id : depth_streams_ids)
-                {
-                    streams[id].texture->min_depth = val / depth_units;
-                }
-            }
-            val = first_depth_stream.texture->max_depth * depth_units;
-            if (ImGui::SliderFloat("##Far  (m)", &val, 0, 16))
-            {
-                for (auto id : depth_streams_ids)
-                {
-                    streams[id].texture->max_depth = val / depth_units;
-                }
-            }
-            for (auto id : depth_streams_ids)
-            {
-                if (streams[id].texture->min_depth > streams[id].texture->max_depth)
-                {
-                    std::swap(streams[id].texture->max_depth, streams[id].texture->min_depth);
-                }
-            }
-        }*/
-    }
-
     subdevice_model::subdevice_model(device& dev, sensor& s, std::string& error_message)
         : s(s), dev(dev), ui(), last_valid_ui(), streaming(false), _pause(false)
     {
@@ -788,7 +648,8 @@ namespace rs2
 
             // Limit Realtec sensor default
             //auto constrain = (rgb_rotation_btn) ? std::make_pair(640, 480) : std::make_pair(0, 0);
-			auto constrain = (rgb_rotation_btn) ? std::make_pair(1280, 720) : std::make_pair(0, 0);
+			//auto constrain = (rgb_rotation_btn) ? std::make_pair(1280, 720) : std::make_pair(0, 0);
+			auto constrain = std::make_pair(1280, 720);
             get_default_selection_index(res_values, constrain, &selection_index);
             ui.selected_res_id = selection_index;
 
@@ -1497,118 +1358,6 @@ namespace rs2
     {
         std::vector<const char*>  device_names_chars = get_string_pointers(device_names);
         return ImGui::Combo(id.c_str(), &new_index, device_names_chars.data(), static_cast<int>(device_names.size()));
-    }
-
-    void viewer_model::show_3dviewer_header(ImFont* font, rs2::rect stream_rect, bool& paused)
-    {
-        int selected_depth_source = -1;
-        std::vector<std::string> depth_sources_str;
-        std::vector<int> depth_sources;
-        int i = 0;
-        for (auto&& s : streams)
-        {
-            if (s.second.is_stream_visible() &&
-                s.second.texture->get_last_frame() &&
-                s.second.profile.stream_type() == RS2_STREAM_DEPTH)
-            {
-                if (selected_depth_source_uid == -1)
-                {
-                    selected_depth_source_uid = s.second.profile.unique_id();
-                }
-                if (s.second.profile.unique_id() == selected_depth_source_uid)
-                {
-                    selected_depth_source = i;
-                }
-
-                depth_sources.push_back(s.second.profile.unique_id());
-
-                auto dev_name = s.second.dev ? s.second.dev->dev.get_info(RS2_CAMERA_INFO_NAME) : "Unknown";
-                auto stream_name = rs2_stream_to_string(s.second.profile.stream_type());
-
-                depth_sources_str.push_back(to_string() << dev_name << " " << stream_name);
-
-                i++;
-            }
-        }
-
-        if (depth_sources_str.size() > 0 && allow_3d_source_change)
-        {
-            i = 0;
-            for (auto&& s : streams)
-            {
-                if (s.second.is_stream_visible() &&
-                    s.second.texture->get_last_frame() &&
-                    s.second.profile.stream_type() == RS2_STREAM_DEPTH)
-                {
-                    if (i == selected_depth_source)
-                    {
-                        selected_depth_source_uid = s.second.profile.unique_id();
-                    }
-                    i++;
-                }
-            }
-        }
-
-        int selected_tex_source = 0;
-        std::vector<std::string> tex_sources_str;
-        std::vector<int> tex_sources;
-        i = 0;
-        for (auto&& s : streams)
-        {
-            if (s.second.is_stream_visible() &&
-                s.second.texture->get_last_frame() &&
-                s.second.profile.stream_type() != RS2_STREAM_DEPTH)
-            {
-                if (selected_tex_source_uid == -1)
-                {
-                    selected_tex_source_uid = s.second.profile.unique_id();
-                }
-                if (s.second.profile.unique_id() == selected_tex_source_uid)
-                {
-                    selected_tex_source = i;
-                }
-
-                tex_sources.push_back(s.second.profile.unique_id());
-
-                auto dev_name = s.second.dev ? s.second.dev->dev.get_info(RS2_CAMERA_INFO_NAME) : "Unknown";
-                auto stream_name = rs2_stream_to_string(s.second.profile.stream_type());
-
-                tex_sources_str.push_back(to_string() << dev_name << " " << stream_name);
-
-                i++;
-            }
-        }
-
-        // Only allow to change texture if we have something to put it on:
-        if (tex_sources_str.size() > 0 && depth_sources_str.size() > 0 && allow_3d_source_change)
-        {
-            i = 0;
-            for (auto&& s : streams)
-            {
-                if (s.second.is_stream_visible() &&
-                    s.second.texture->get_last_frame() &&
-                    s.second.profile.stream_type() != RS2_STREAM_DEPTH)
-                {
-                    if (i == selected_tex_source)
-                    {
-                        selected_tex_source_uid = s.second.profile.unique_id();
-                    }
-                    i++;
-                }
-            }
-        }
-
-        /*if (selected_depth_source_uid >= 0) {
-            auto depth = streams[selected_depth_source_uid].texture->get_last_frame();
-            if (depth) pc.push_frame(depth);
-        }
-
-        frame tex;
-        if (selected_tex_source_uid >= 0)
-        {
-            tex = streams[selected_tex_source_uid].texture->get_last_frame();
-            if (tex) pc.update_texture(tex);
-        }*/
     }
 
     void viewer_model::gc_streams()
@@ -2653,6 +2402,7 @@ namespace rs2
 		if (!texture2d)
 			glGenTextures(1, &texture2d);
 
+
 		glBindTexture(GL_TEXTURE_2D, texture2d);
 
 		glViewport(0, 0, viewer_rect.w, viewer_rect.h);
@@ -2689,7 +2439,6 @@ namespace rs2
 
         texture_buffer::draw_axis(0.1, 1);
 
-        //if (draw_plane)
 		glLineWidth(2);
 		glBegin(GL_LINES);
 
@@ -2747,153 +2496,37 @@ namespace rs2
 
 			glEnd();
 
-			glColor4f(1.f, 1.f, 1.f, 1.f);
 		}
 
+		glColor4f(56.f, 145.f, 152.f, 1.f);
 		if (last_points)
 		{
 			// Non-linear correspondence customized for non-flat surface exploration
 			glPointSize(std::sqrt(viewer_rect.w / last_points.get_profile().as<video_stream_profile>().width()));
 
-			if (selected_tex_source_uid >= 0)
-			{
-				glBindTexture(GL_TEXTURE_2D, 0);
-				auto tex = last_texture->get_gl_handle();
-				glBindTexture(GL_TEXTURE_2D, tex);
-				glEnable(GL_TEXTURE_2D);
-
-				glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, texture_border_mode);
-				glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, texture_border_mode);
-			}
-
-			//glTexParameterfv(GL_TEXTURE_2D, GL_TEXTURE_BORDER_COLOR, tex_border_color);
-
 			glBegin(GL_POINTS);
-
 			auto vertices = last_points.get_vertices();
-			auto tex_coords = last_points.get_texture_coordinates();
 
 			for (int i = 0; i < last_points.size(); i++)
 			{
 				if (vertices[i].z)
 				{
 					glVertex3fv(vertices[i]);
-					glTexCoord2fv(tex_coords[i]);
 				}
 
 			}
 			glEnd();
-			glBindTexture(GL_TEXTURE_2D, 0);
 		}
-        /*if (syncronize)
-        {
-            auto tex = streams[selected_tex_source_uid].texture->get_last_frame();
-            if (tex) s(tex);
-        }
 
-        if (auto points = pc.get_points())
-        {
-            if (syncronize)
-            {
-                s(points);
-                rs2::frameset fs;
-                if (s.poll_for_frames(&fs))
-                    if (fs && fs.size() > 1)
-                    {
-                        for (auto&& f : fs)
-                        {
-                            if (f.is<rs2::points>()) last_points = f;
-                            else last_texture = f;
-                        }
-                    }
-            }
-            else
-            {
-                last_texture = streams[selected_tex_source_uid].texture->get_last_frame();
-                last_points = points;
-            }
-
-            if (draw_frustrum)
-            {
-                glLineWidth(1.f);
-                glBegin(GL_LINES);
-
-                auto intrin = points.get_profile().as<video_stream_profile>().get_intrinsics();
-
-                glColor4f(sensor_bg.x, sensor_bg.y, sensor_bg.z, 0.5f);
-
-                for (float d = 1; d < 6; d += 2)
-                {
-                    auto get_point = [&](float x, float y) -> float3
-                    {
-                        float point[3];
-                        float pixel[2]{ x, y };
-                        rs2_deproject_pixel_to_point(point, &intrin, pixel, d);
-                        glVertex3f(0.f, 0.f, 0.f);
-                        glVertex3fv(point);
-                        return{ point[0], point[1], point[2] };
-                    };
-
-                    auto top_left = get_point(0, 0);
-                    auto top_right = get_point(intrin.width, 0);
-                    auto bottom_right = get_point(intrin.width, intrin.height);
-                    auto bottom_left = get_point(0, intrin.height);
-
-                    glVertex3fv(&top_left.x); glVertex3fv(&top_right.x);
-                    glVertex3fv(&top_right.x); glVertex3fv(&bottom_right.x);
-                    glVertex3fv(&bottom_right.x); glVertex3fv(&bottom_left.x);
-                    glVertex3fv(&bottom_left.x); glVertex3fv(&top_left.x);
-                }
-
-                glEnd();
-
-                glColor4f(1.f, 1.f, 1.f, 1.f);
-            }
-
-            if (last_points && last_texture)
-            {
-                texture.upload(last_texture);
-
-                glPointSize((float)viewer_rect.w / points.get_profile().as<video_stream_profile>().width());
-
-                if (selected_tex_source_uid >= 0)
-                {
-					glBindTexture(GL_TEXTURE_2D, 0);
-                    auto tex = texture.get_gl_handle();
-                    glBindTexture(GL_TEXTURE_2D, tex);
-                    glEnable(GL_TEXTURE_2D);
-
-                    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, texture_border_mode);
-                    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, texture_border_mode);
-                }
-
-                glBegin(GL_POINTS);
-
-                auto vertices = last_points.get_vertices();
-                auto tex_coords = last_points.get_texture_coordinates();
-
-                for (int i = 0; i < last_points.size(); i++)
-                {
-                    if (vertices[i].z)
-                    {
-                        glVertex3fv(vertices[i]);
-                        glTexCoord2fv(tex_coords[i]);
-                    }
-
-                }
-                glEnd();
-				glBindTexture(GL_TEXTURE_2D, 0);
-            }
-        }*/
-		glBindTexture(GL_TEXTURE_2D, texture2d);
 		glDisable(GL_DEPTH_TEST);
-
+		glEnable(GL_TEXTURE_2D);
 		glCopyTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, 0, 0, viewer_rect.w, viewer_rect.h, 0);
 
 		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT);
 		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT);
 		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
 		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+
 
 		glMatrixMode(GL_MODELVIEW);
 		glPopMatrix();
@@ -3360,10 +2993,6 @@ namespace rs2
                             }
                         }
                     }
-
-                    if (auto ds = sub->s.as<depth_sensor>())
-                        viewer.draw_histogram_options(ds.get_depth_scale(), *sub);
-
                     ImGui::TreePop();
                 }
 
@@ -3395,8 +3024,6 @@ namespace rs2
             _old_layout = _layout;
             _layout = l;
         }
-
-        //if (_old_layout.size() == 0 && l.size() == 1) return l;
 
         auto diff = now - _transition_start_time;
         auto ms = duration_cast<milliseconds>(diff).count();
@@ -3567,7 +3194,6 @@ namespace rs2
                 idx++;
             }
         }
-
 
         auto flags = ImGuiWindowFlags_NoResize |
             ImGuiWindowFlags_NoMove |

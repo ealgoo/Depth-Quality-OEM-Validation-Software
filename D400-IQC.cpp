@@ -45,10 +45,11 @@ using namespace nlohmann;
 #define TIME_TO_CAPTURE 3
 #define TESTING_TIME	6
 #define MAJOR_VERSION 1
-#define MINOR_VERSION 0
-#define PATCH_VERSION 11
+#define MINOR_VERSION 1
+#define PATCH_VERSION 0
 
 bool gStartCapture = false, gStartTesting = false, gJoinTrigger = false;
+int gStreamCount = -1;
 region_of_interest gRoi = { -1, -1, -1, -1 };
 int gCalculate_sts = -1;
 float gOffsetRatio = 0;
@@ -90,7 +91,7 @@ void testingThreadFun() {
 		else if (res == WAIT_OBJECT_0 + 1)
 		{
 			saveCount++;
-			if (saveCount == 4)
+			if (saveCount == gStreamCount)
 			{
 				gStartTesting = false;
 				saveCount = 0;
@@ -119,7 +120,7 @@ void* testingThreadFun(void* context){
                 else if(testSts & SAVECOMP)
                 {
                     saveCount++;
-                    if (saveCount == 4)
+                    if (saveCount == gStreamCount)
                     {
                             gStartTesting = false;
                             saveCount = 0;
@@ -239,20 +240,37 @@ bool readConfig() {
 	return true;
 }
 
+bool calTestResult(test_result result)
+{
+	if (result.fillRate * 100.0f < gConfig.fillRatePassP)
+		return false;
+	if (abs(result.accuracy) > gConfig.accuracyPassP)
+		return false;
+	if (result.rmsFittingPlane > gConfig.rmsFittingPlanePassRate)
+		return false;
+	//remove temporarily, waiting for more information about criteria of subpixel.
+	//if (result.rmsSubpixel > gConfig.rmsSubpixelPassRate)
+	//return false;
+	return true;
+}
+
 void drawTestPicture(video_frame&& vframe, test_result* result)
 {
 	int actual_w = vframe.get_width(), actual_h = vframe.get_height();
 	Mat color24(Size(actual_w, actual_h), CV_8UC3, (void*)vframe.get_data(), Mat::AUTO_STEP);
 	char text[100];
-	sprintf(text, "Accuracy = %.2f, FillRate = %.2f, subpixelRMS = %.2f, fittingRMS = %.2f", result->accuracy, result->fillRate, result->rmsSubpixel, result->rmsFittingPlane);
+	sprintf(text, "Angle = %.2f, Accuracy = %.2f, FillRate = %.2f, FittingRMS = %.2f", result->angle, result->accuracy, result->fillRate, result->rmsFittingPlane);
 	putText(color24, text, Point(gRoi.min_x, gRoi.min_y), CV_FONT_HERSHEY_PLAIN, 1, Scalar(255, 255, 255));
 	rectangle(color24, Point(gRoi.min_x, gRoi.min_y), Point(gRoi.max_x, gRoi.max_y), Scalar(255, 255, 255), 1);
 }
 
 void saveResult(test_result* result)
 {
+	gCalculate_sts = calTestResult(*result);
+	std::string pf = "";
 	std::ostringstream fileStream;
-	fileStream << "Serial," << result->serialNumStr << ",Angle," << result->angle << ",Accuracy," << result->accuracy << ",FillRate," << result->fillRate << ",fitting plane RMS," << result->rmsFittingPlane << "\n";
+	if (gCalculate_sts == 1) pf = "Pass"; else if (gCalculate_sts == 0) pf = "Fail";
+	fileStream << "Serial," << result->serialNumStr << ",Angle," << result->angle << ",Accuracy," << result->accuracy << ",FillRate," << result->fillRate << ",Fitting plane RMS," << result->rmsFittingPlane << ",Result," << pf << "\n";
 	std::ofstream save_file(result->csvFileName, std::ofstream::binary);
 	save_file.write((char*)fileStream.str().data(), fileStream.str().size());
 	save_file.close();
@@ -368,20 +386,6 @@ struct user_data
     context ctx;
     viewer_model* model = nullptr;
 };
-
-bool calTestResult(test_result result)
-{
-	if (result.fillRate * 100.0f < gConfig.fillRatePassP)
-		return false;
-	if (abs(result.accuracy) > gConfig.accuracyPassP)
-		return false;
-	if (result.rmsFittingPlane > gConfig.rmsFittingPlanePassRate)
-		return false;
-	//remove temporarily, waiting for more information about criteria of subpixel.
-	//if (result.rmsSubpixel > gConfig.rmsSubpixelPassRate)
-		//return false;
-	return true;
-}
 
 void connectInit(std::string& resultFolder, char* outputFilePath, std::string serialNumStr) {
 	char buffer[100];
@@ -674,9 +678,21 @@ void startStreams(float& baseline, rs2_intrinsics& intrin, stream_format_idx sfI
 	depthDev->stream_enabled[sfIdx.depthSIdx] = true;
 	depthDev->stream_enabled[sfIdx.infra1SIdx] = true;
 	depthDev->stream_enabled[sfIdx.infra2SIdx] = true;
-	colorDev->stream_enabled[sfIdx.rgbColorFIdx] = true;
+	std::vector<stream_profile> profilesColor;
+	if (gStreamCount == -1)
+	{
+		if (colorDev != nullptr)
+			gStreamCount = 4;
+		else
+			gStreamCount = 3;
+	}
+	if (colorDev != nullptr)
+	{
+		colorDev->stream_enabled[sfIdx.rgbColorFIdx] = true;
+		profilesColor = colorDev->get_selected_profiles();
+	}
 	auto profiles = depthDev->get_selected_profiles();
-	auto profilesColor = colorDev->get_selected_profiles();
+	//auto profilesColor = colorDev->get_selected_profiles();
 	//get baseline while test
 	stream_profile left_s, right_s;
 	for (auto p : profiles)
@@ -692,12 +708,14 @@ void startStreams(float& baseline, rs2_intrinsics& intrin, stream_format_idx sfI
 
 	depthDev->play(profiles);
 	std::this_thread::sleep_for(std::chrono::milliseconds(10));
-	colorDev->play(profilesColor);
+	if(colorDev != nullptr)
+		colorDev->play(profilesColor);
 
 	for (auto&& profile : profiles)
 		viewerModel.streams[profile.unique_id()].dev = depthDev;
-	for (auto&& profile : profilesColor)
-		viewerModel.streams[profile.unique_id()].dev = colorDev;
+	if(colorDev != nullptr)
+		for (auto&& profile : profilesColor)
+			viewerModel.streams[profile.unique_id()].dev = colorDev;
 }
 
 void getAngleSuggestion(angles angles, char* suggestion)
@@ -829,6 +847,7 @@ int main(int, char**) try
 				testIdx = 0;
 				mViewer_model.selected_depth_source_uid = -1;
 				gRoi.min_x = -1;
+				gStreamCount = -1;
 				isStreaming = false;
 				device_models.clear();
             }
@@ -1259,7 +1278,7 @@ int main(int, char**) try
 				if(device_models[0].subdevices.size() != 0)
                 {
 					auto subDepth = device_models[0].subdevices[0];
-					auto subColor = device_models[0].subdevices[1];
+					auto subColor = (device_models[0].subdevices.size() == 1 ? nullptr : device_models[0].subdevices[1]);
                     try
                     {
                         static float t = 0.f;
@@ -1324,7 +1343,8 @@ int main(int, char**) try
 								if (!gStartTesting)//test complete
 								{
 									subDepth->stop();
-									subColor->stop();
+									if(subColor != nullptr)
+										subColor->stop();
 									std::this_thread::sleep_for(std::chrono::milliseconds(300));
 									showResult = true;
 								}
@@ -1340,8 +1360,8 @@ int main(int, char**) try
 
 						if (showResult)
 						{
-							if (gCalculate_sts == -1)
-								gCalculate_sts = calTestResult(testResult);
+							//if (gCalculate_sts == -1)
+								//gCalculate_sts = calTestResult(testResult);
 							if(gCalculate_sts == 1)
 							{
 								ImGui::GetWindowDrawList()->AddRectFilled({ abs_pos.x, abs_pos.y }, { abs_pos.x + 160, abs_pos.y + 150 }, ImColor(from_rgba(0, 255, 0, 0xff)));
@@ -1397,7 +1417,7 @@ int main(int, char**) try
 						{
 							auto temp_texture = mViewer_model.upload_frame(std::move(f), &p);
 							//select RGB as texture
-							if (f.get_profile().format() == RS2_FORMAT_RGB8)
+							if (f.get_profile().format() == RS2_FORMAT_Y8 || f.get_profile().unique_id() == sfIdx.infra1SIdx)
 								texture_frame = temp_texture;
 						}
                     }
@@ -1421,7 +1441,6 @@ int main(int, char**) try
 
 		if (isStreaming)
 		{
-			mViewer_model.show_3dviewer_header(font_14, layout[DUMMY_PC_STREAM_ID], paused);
 			//display point cloud inside the rect
 			mViewer_model.update_3d_camera(layout[DUMMY_PC_STREAM_ID], mouse, false);
 			
@@ -1555,7 +1574,7 @@ int main(int, char**) try
 			gJoinTrigger = false;
 #ifdef _WIN32
 			ResetEvent(gSaveImageEvent);
-			for (int i = 0; i < 4; i++)
+			for (int i = 0; i < gStreamCount; i++)
 			{
 				if(saveThread[i] != nullptr && saveThread[i]->joinable())
 					saveThread[i]->join();
@@ -1569,7 +1588,7 @@ int main(int, char**) try
 				delete calResultThread;
 			}
 #else
-			for(int i=0; i<3; i++)
+			for(int i=0; i<gStreamCount; i++)
 			{
 				pthread_join(saveThread[i], NULL);
 				frameData[i].clear();
@@ -1637,6 +1656,7 @@ int main(int, char**) try
 	//mViewer_model.pc.stop();
     ImGui_ImplGlfw_Shutdown();
     glfwTerminate();
+	glClear(GL_COLOR_BUFFER_BIT);
 
 
     return EXIT_SUCCESS;

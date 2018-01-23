@@ -605,7 +605,6 @@ namespace rs2
         }
 
 		texture_buffer* upload_frame(frame&& f, points* p);
-        void draw_histogram_options(float depth_scale, const subdevice_model& sensor);
 
         std::map<int, rect> calc_layout(const rect& r, bool calwPC = false);
 
@@ -618,8 +617,6 @@ namespace rs2
         void popup_if_error(ImFont* font, std::string& error_message);
 
         void show_event_log(ImFont* font_14, float x, float y, float w, float h);
-
-        void show_3dviewer_header(ImFont* font, rs2::rect stream_rect, bool& paused);
 
         void update_3d_camera(const rect& viewer_rect,
                               mouse_info& mouse, bool force = false);
