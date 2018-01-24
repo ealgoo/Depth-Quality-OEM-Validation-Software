@@ -33,8 +33,8 @@
 	- libs/64/opencv_world330.lib (64 bits opencv_world330.lib)
 	- libs/64/opencv_world330d.lib (64 bits opencv_world330d.lib)
 	
-<p align ="left"><img src="res/root.png"></p>
-<p align ="left"><img src="res/opencv.png"></p> 
+<p align ="left"><img src="res/root.PNG"></p>
+<p align ="left"><img src="res/opencv.PNG"></p> 
 
 ## Overview
 
