@@ -1,12 +1,12 @@
 {
     "config":{
-	    "FillRatePassPercentage": 97.9,
-		"AccuracyPassPercentage": 98,
-	    "TestDistance": 1160,
+	    "FillRatePassPercentage": 99,
+		"AccuracyPassPercentage": 2,
+	    "TestDistance": 2000,
 		"PostProcessing": "True",
 		"RMSFittingPlanePassRate": 2,
 		"RMSSubpixelPassRate": 0.15,
-		"ROIPercentage": 40,
+		"ROIPercentage": 80,
 		"MaxAngle": 5
 	}
 }

@@ -13,6 +13,29 @@
 * Ubuntu 16.04, OpenCV, Pkgconfig, X11, GTK3, pthread, RealSense required.
 * CMake 2.8.3+
 
+## Windows Folder structure
+* In order to run the CMake on the project without problem, you need to follow below instruction to put dlls and libs if you build the dependent libraries by your own. If you download the pre-built libraries from release, you can ignore this section.
+* Create "dll" folder, which contains sub-folders as below
+	- dll/32/realsense2.dll (32 bits realsense2.dll)
+	- dll/64/realsense2.dll (64 bits realsense2.dll)
+* Create "lib" folder, which contains sub-folders as below
+	- lib/32/glfw3.lib (32 bits glfw3.lib)
+	- lib/32/realsense2.lib (32 bits realsense2.lib)
+	- lib/64/glfw3.lib (64 bits glfw3.lib)
+	- lib/64/realsense2.lib (64 bits realsense2.lib)
+* Create "dlls" folder under "third-party/opencv"
+	- dlls/32/opencv_world330.dll (32 bits opencv_world330.dll)
+	- dlls/32/opencv_world330d.dll (32 bits opencv_world330d.dll)
+	- dlls/64/opencv_world330.dll (64 bits opencv_world330.dll)
+	- dlls/64/opencv_world330d.dll (64 bits opencv_world330d.dll)
+	- libs/32/opencv_world330.lib (32 bits opencv_world330.lib)
+	- libs/32/opencv_world330d.lib (32 bits opencv_world330d.lib)
+	- libs/64/opencv_world330.lib (64 bits opencv_world330.lib)
+	- libs/64/opencv_world330d.lib (64 bits opencv_world330d.lib)
+	
+<p align ="left"><img src="res/root.png"></p>
+<p align ="left"><img src="res/opencv.png"></p> 
+
 ## Overview
 
 D400 IQC is the testing tool checking device quality through simple, cross-platform UI. The tool offers:
