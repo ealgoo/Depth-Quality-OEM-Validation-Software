@@ -38,21 +38,14 @@
 
 ## Overview
 
-D400 IQC is the testing tool checking device quality through simple, cross-platform UI. The tool offers:
+Depth Quality OEM Validation Software is the testing tool checking device quality through simple, cross-platform UI. The tool offers:
 
 * Checking depth fill rate and distance from 80% ROI on image.
-* JSON file provide flexibility for customer to change the test criteria.
-	- FillRatePassPercentage: Result needs to lager than 99% to pass fill rate test.
-    - AccuracyPassPercentage: Accuracy error rate, should be under 2%.
-	- TestDistance(mm): Test ground truth distance, default is "2000mm".
-	- PostProcessing: Enable/Disable the post process before test, default is "enable".
-	- RMSFittingPlanePassRate: Point to fitting plane error rate, should be under 2%.
-	- ROIPercentag: Testing area ratio of the whole image, default is "80%".
-	- MaxAngle: When the camera pose indicator will appear, suggested test angle to target should be under 3 degree.
+* All the testing criteria please refer to datasheet.
 * Testing result will be shown at the left side panel with "Pass" or "Fail" also the test result.
-* Testing result will also be saved inside the Result folder which located along with the IQC binary.
+* Testing result will also be saved inside the Result folder which located along with the software binary.
 * Saved result include csv file, depth/color image and Left/Right IR image.
 
 ## Implementation Notes
 
-You can get D400 IQC in form of a binary package on Windows and Linux, or build it from source alongside the rest of the library. The IQC tool is designed to be lightweight, requiring only a handful of embeded dependencies. Cross-platform UI is a combination of raw OpenGL calls, GLFW for cross-platform window and event management, and IMGUI for the interface elements. Please see COPYING for full list of attributions.
+You can get Depth Quality OEM Validation Software in form of a binary package on Windows and Linux, or build it from source alongside the rest of the library. The IQC tool is designed to be lightweight, requiring only a handful of embeded dependencies. Cross-platform UI is a combination of raw OpenGL calls, GLFW for cross-platform window and event management, and IMGUI for the interface elements. Please see COPYING for full list of attributions.

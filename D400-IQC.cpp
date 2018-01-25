@@ -45,7 +45,7 @@ using namespace nlohmann;
 #define TIME_TO_CAPTURE 3
 #define TESTING_TIME	6
 #define MAJOR_VERSION 1
-#define MINOR_VERSION 1
+#define MINOR_VERSION 2
 #define PATCH_VERSION 0
 
 bool gStartCapture = false, gStartTesting = false, gJoinTrigger = false;
@@ -259,7 +259,7 @@ void drawTestPicture(video_frame&& vframe, test_result* result)
 	int actual_w = vframe.get_width(), actual_h = vframe.get_height();
 	Mat color24(Size(actual_w, actual_h), CV_8UC3, (void*)vframe.get_data(), Mat::AUTO_STEP);
 	char text[100];
-	sprintf(text, "Angle = %.2f, Accuracy = %.2f, FillRate = %.2f, FittingRMS = %.2f", result->angle, result->accuracy, result->fillRate, result->rmsFittingPlane);
+	sprintf(text, "Angle = %.2f, Z-Accuracy = %.2f, Fill Rate = %.2f, Spatial Noise = %.2f", result->angle, result->accuracy, result->fillRate, result->rmsFittingPlane);
 	putText(color24, text, Point(gRoi.min_x, gRoi.min_y), CV_FONT_HERSHEY_PLAIN, 1, Scalar(255, 255, 255));
 	rectangle(color24, Point(gRoi.min_x, gRoi.min_y), Point(gRoi.max_x, gRoi.max_y), Scalar(255, 255, 255), 1);
 }
@@ -270,7 +270,7 @@ void saveResult(test_result* result)
 	std::string pf = "";
 	std::ostringstream fileStream;
 	if (gCalculate_sts == 1) pf = "Pass"; else if (gCalculate_sts == 0) pf = "Fail";
-	fileStream << "Serial," << result->serialNumStr << ",Angle," << result->angle << ",Accuracy," << result->accuracy << ",FillRate," << result->fillRate << ",Fitting plane RMS," << result->rmsFittingPlane << ",Result," << pf << "\n";
+	fileStream << "Serial," << result->serialNumStr << ",Angle," << result->angle << ",Z-Accuracy," << result->accuracy << ",Fill Rate," << result->fillRate << ",Spatial Noise," << result->rmsFittingPlane << ",Result," << pf << "\n";
 	std::ofstream save_file(result->csvFileName, std::ofstream::binary);
 	save_file.write((char*)fileStream.str().data(), fileStream.str().size());
 	save_file.close();
@@ -750,7 +750,7 @@ int main(int, char**) try
     if (!glfwInit()) exit(1);
 
     rs2_error* e = nullptr;
-    std::string title = to_string() << "D400 IQC v" << MAJOR_VERSION << "." << MINOR_VERSION << "." << PATCH_VERSION;
+    std::string title = to_string() << "Depth Quality OEM Validation Software v" << MAJOR_VERSION << "." << MINOR_VERSION << "." << PATCH_VERSION;
 
     // Create GUI Windows
     auto window = glfwCreateWindow(1280, 1000, title.c_str(), nullptr, nullptr);

@@ -1,7 +1,7 @@
 # ubuntu 16.04 LTS cmake version 3.5.1
 cmake_minimum_required(VERSION 2.8.3)
 
-project(RealsenseToolsIQC)
+project(Depth_Quality_OEM_Validation_Software)
 
 # Save the command line compile commands in the build output
 set(CMAKE_EXPORT_COMPILE_COMMANDS 1)
@@ -20,6 +20,8 @@ find_package(OpenGL)
 if(NOT OPENGL_FOUND)
     message(FATAL_ERROR "\n\n OpenGL package is missing!\n\n")
 endif()
+
+set(APP_NAME "Depth_Quality_OEM_Validation_Software")
 
 if(UNIX)
     find_package(PkgConfig REQUIRED)
@@ -57,7 +59,7 @@ set(RS_IQC_CPP
 
 # config-ui
 if(WIN32)
-	add_executable(D400_IQC WIN32
+	add_executable(${APP_NAME} WIN32
 		${RS_IQC_CPP} ${CMAKE_CURRENT_SOURCE_DIR}/res/resource.h
 		${RS_IQC_CPP} ${CMAKE_CURRENT_SOURCE_DIR}/res/realsense-viewer.rc)
 		
@@ -65,7 +67,7 @@ if(WIN32)
 		${CMAKE_CURRENT_SOURCE_DIR}/res/resource.h
 		${CMAKE_CURRENT_SOURCE_DIR}/res/realsense-viewer.rc
 		)
-	include_directories(D400_IQC third-party third-party/imgui include/librealsense2 third-party/glfw/include include third-party/glfw/include ${CMAKE_CURRENT_SOURCE_DIR}/res/ third-party/opencv)
+	include_directories(${APP_NAME} third-party third-party/imgui include/librealsense2 third-party/glfw/include include third-party/glfw/include ${CMAKE_CURRENT_SOURCE_DIR}/res/ third-party/opencv)
 	
 	math(EXPR BITS "8*${CMAKE_SIZEOF_VOID_P}")
 	find_library(OPENCV_RELEASE_LIBRARY NAMES opencv_world330.lib HINTS ${CMAKE_CURRENT_SOURCE_DIR}/third-party/opencv/libs/${BITS})
@@ -73,9 +75,9 @@ if(WIN32)
 	find_library(GLFW_LIBRARY NAMES glfw3.lib HINTS ${CMAKE_CURRENT_SOURCE_DIR}/lib/${BITS})
 	find_library(LIBRS_LIBRARY NAMES realsense2.lib HINTS ${CMAKE_CURRENT_SOURCE_DIR}/lib/${BITS})
 	SET(OPENCV_LIBRARY optimized ${OPENCV_RELEASE_LIBRARY} debug ${OPENCV_DEBUG_LIBRARY})
-	target_link_libraries(D400_IQC ${DEPENDENCIES} ${GTK3_LIBRARIES} ${OPENCV_LIBRARY} ${GLFW_LIBRARY} ${LIBRS_LIBRARY} ${OPENGL_LIBRARIES})
+	target_link_libraries(${APP_NAME} ${DEPENDENCIES} ${GTK3_LIBRARIES} ${OPENCV_LIBRARY} ${GLFW_LIBRARY} ${LIBRS_LIBRARY} ${OPENGL_LIBRARIES})
 
-	add_custom_command(TARGET D400_IQC
+	add_custom_command(TARGET ${APP_NAME}
 		POST_BUILD
 		COMMAND if \"$(ConfigurationName)\" == \"Release\" (
 			xcopy /d /y \"$(ProjectDir)..\\third-party\\opencv\\dlls\\$(PlatformArchitecture)\\opencv_world330.dll\" \"$(OutDir)\")
@@ -105,17 +107,17 @@ else()
                       /usr/local/lib/${CMAKE_LIBRARY_ARCHITECTURE}
                       /usr/X11R6/lib
         )
-	add_executable(D400_IQC 
+	add_executable(${APP_NAME} 
 		${RS_IQC_CPP})
-	include_directories(D400_IQC third-party/imgui third-party include)
-        target_link_libraries(D400_IQC ${GTK3_LIBRARIES} ${OpenCV_LIBS} ${X11_LIBRARIES} ${GLFW_LIBRARIES} realsense2 ${OPENGL_LIBRARIES} pthread)
+	include_directories(${APP_NAME} third-party/imgui third-party include)
+        target_link_libraries(${APP_NAME} ${GTK3_LIBRARIES} ${OpenCV_LIBS} ${X11_LIBRARIES} ${GLFW_LIBRARIES} realsense2 ${OPENGL_LIBRARIES} pthread)
 	file(COPY config.json DESTINATION ${CMAKE_BINARY_DIR})
 endif()
 
 install(
 	TARGETS
 
-	D400_IQC
+	${APP_NAME}
 
 	RUNTIME DESTINATION bin
 )
