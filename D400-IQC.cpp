@@ -45,7 +45,7 @@ using namespace nlohmann;
 #define TIME_TO_CAPTURE 3
 #define TESTING_TIME	6
 #define MAJOR_VERSION 1
-#define MINOR_VERSION 2
+#define MINOR_VERSION 3
 #define PATCH_VERSION 0
 
 bool gStartCapture = false, gStartTesting = false, gJoinTrigger = false;
@@ -242,7 +242,7 @@ bool readConfig() {
 
 bool calTestResult(test_result result)
 {
-	if (result.fillRate * 100.0f < gConfig.fillRatePassP)
+	if (result.fillRate < gConfig.fillRatePassP)
 		return false;
 	if (abs(result.accuracy) > gConfig.accuracyPassP)
 		return false;
