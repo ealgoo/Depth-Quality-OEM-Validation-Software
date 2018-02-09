@@ -45,7 +45,7 @@ using namespace nlohmann;
 #define TIME_TO_CAPTURE 3
 #define TESTING_TIME	6
 #define MAJOR_VERSION 1
-#define MINOR_VERSION 3
+#define MINOR_VERSION 4
 #define PATCH_VERSION 0
 
 bool gStartCapture = false, gStartTesting = false, gJoinTrigger = false;
@@ -135,11 +135,18 @@ void* testingThreadFun(void* context){
 }
 #endif
 
+struct angles {
+	float angle;
+	float angle_x;
+	float angle_y;
+
+};
+
 struct test_result {
 
 	float fillRate;
 	float accuracy;
-	float angle;
+	angles _angles;
 	std::string serialNumStr;
 	std::string csvFileName;
 	float rmsSubpixel;
@@ -152,7 +159,7 @@ struct test_result {
 		accuracy = 0.f;
 		rmsSubpixel = 0.f;
 		rmsFittingPlane = 0.f;
-		angle = 0.f;
+		_angles = { 0.f, 0.f, 0.f };
 	}
 };
 
@@ -181,12 +188,6 @@ struct stream_format_idx {
 	}
 };
 
-struct angles {
-	float angle;
-	float angle_x;
-	float angle_y;
-};
-
 //For RMS use
 struct snapshot_metrics
 {
@@ -209,6 +210,11 @@ struct snapshot_metrics
 	float data[4];
 };
 //end
+
+float rotateTheta(float cosTheta)
+{
+	return static_cast<float>(std::acos(cosTheta) / M_PI * 180.);
+}
 
 bool readConfig() {
 	try {
@@ -259,7 +265,7 @@ void drawTestPicture(video_frame&& vframe, test_result* result)
 	int actual_w = vframe.get_width(), actual_h = vframe.get_height();
 	Mat color24(Size(actual_w, actual_h), CV_8UC3, (void*)vframe.get_data(), Mat::AUTO_STEP);
 	char text[100];
-	sprintf(text, "Angle = %.2f, Z-Accuracy = %.2f, Fill Rate = %.2f, Spatial Noise = %.2f", result->angle, result->accuracy, result->fillRate, result->rmsFittingPlane);
+	sprintf(text, "Angle = %.2f, Z-Accuracy(%%) = %.2f, Fill Rate(%%) = %.2f, Spatial Noise(%%) = %.2f", result->_angles.angle, result->accuracy, result->fillRate, result->rmsFittingPlane);
 	putText(color24, text, Point(gRoi.min_x, gRoi.min_y), CV_FONT_HERSHEY_PLAIN, 1, Scalar(255, 255, 255));
 	rectangle(color24, Point(gRoi.min_x, gRoi.min_y), Point(gRoi.max_x, gRoi.max_y), Scalar(255, 255, 255), 1);
 }
@@ -270,7 +276,7 @@ void saveResult(test_result* result)
 	std::string pf = "";
 	std::ostringstream fileStream;
 	if (gCalculate_sts == 1) pf = "Pass"; else if (gCalculate_sts == 0) pf = "Fail";
-	fileStream << "Serial," << result->serialNumStr << ",Angle," << result->angle << ",Z-Accuracy," << result->accuracy << ",Fill Rate," << result->fillRate << ",Spatial Noise," << result->rmsFittingPlane << ",Result," << pf << "\n";
+	fileStream << "Serial," << result->serialNumStr << ",Angle," << result->_angles.angle << ",Angle_x," << -90 + rotateTheta(result->_angles.angle_x) << ",Angle_y," << -90 + rotateTheta(result->_angles.angle_y) << ",Z-Accuracy(%)," << result->accuracy << ",Fill Rate(%)," << result->fillRate << ",Spatial Noise(%)," << result->rmsFittingPlane << ",Result," << pf << "\n";
 	std::ofstream save_file(result->csvFileName, std::ofstream::binary);
 	save_file.write((char*)fileStream.str().data(), fileStream.str().size());
 	save_file.close();
@@ -304,7 +310,7 @@ void* calResultThreadFun(void* ctx) {
 	result->rmsFittingPlane = res.data[snapshot_metrics::FITTING_RMS];
 	result->rmsSubpixel = res.data[snapshot_metrics::SUBPIXEL];
 	result->accuracy = res.data[snapshot_metrics::ACCURACY];
-        result->angle = res._angles.angle;
+        result->_angles = res._angles;
 	drawTestPicture(_frame->as<video_frame>(), result);
 	saveResult(result);
 #ifdef _WIN32
@@ -1255,15 +1261,15 @@ int main(int, char**) try
 
 				if (showResult)
 				{
-					ImGui::Text("Fill Rate:");
+					ImGui::Text("Fill Rate(%%):");
 					ImGui::SetCursorPosX(col2);
 					ImGui::Text("%f", testResult.fillRate);
 
-					ImGui::Text("Accuracy:");
+					ImGui::Text("Z-Accuracy(%%):"); 
 					ImGui::SetCursorPosX(col2);
 					ImGui::Text("%f", testResult.accuracy);
 
-					ImGui::Text("Fitting Plane RMS:");
+					ImGui::Text("Spatial Noise(%%):");
 					ImGui::SetCursorPosX(col2);
 					ImGui::Text("%f", testResult.rmsFittingPlane);				
 				}
@@ -1452,6 +1458,8 @@ int main(int, char**) try
 				calPlane((const uint16_t*)vframe.get_data(), vframe.get_width(), vframe.get_height(), 0.001, &intrin, &(mViewer_model.roi_rect), angles);
 				ImGui::SetCursorPosX(0); ImGui::Text("Angle : "); getAngleSuggestion(angles, temp);
 				ImGui::SetCursorPosX(col1); ImGui::Text("%s", temp);
+				ImGui::SetCursorPosX(0); ImGui::Text("Angle : (x, y)");
+				ImGui::SetCursorPosX(col1); ImGui::Text("(%f,%f)", -90+ rotateTheta(angles.angle_x), -90+rotateTheta(angles.angle_y));
 				if (gStartTesting)
 				{
 					ImGui::Text("Testing started");
