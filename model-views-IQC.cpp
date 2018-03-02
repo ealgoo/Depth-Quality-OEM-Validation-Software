@@ -1119,7 +1119,7 @@ namespace rs2
         _stream_not_alive(std::chrono::milliseconds(1500))
     {}
 
-	texture_buffer* stream_model::upload_frame(frame&& f)
+	texture_buffer* stream_model::upload_frame(frame f)
     {
         if (dev && dev->is_paused()) return nullptr;
 
@@ -2392,12 +2392,12 @@ namespace rs2
 
     void viewer_model::render_3d_view(const rect& viewer_rect, texture_buffer* texture, rs2::points points)
     {
-		if (texture == nullptr)
-			return;
+		//if (texture == nullptr)
+			//return;
 		if (points)
 			last_points = points;
-		if (texture)
-			last_texture = texture;
+		//if (texture)
+			//last_texture = texture;
 
 		if (!texture2d)
 			glGenTextures(1, &texture2d);
@@ -2575,7 +2575,7 @@ namespace rs2
         mouse.prev_cursor = mouse.cursor;
     }
 
-	texture_buffer* viewer_model::upload_frame(frame&& f, points* p)
+	texture_buffer* viewer_model::upload_frame(frame f, points* p)
     {
         auto index = f.get_profile().unique_id();
 		pointcloud pc;
@@ -2586,7 +2586,7 @@ namespace rs2
 			  f = apply_filters(f);
 			*p = pc.calculate(f);
 		}
-        return streams[index].upload_frame(std::move(f));
+        return streams[index].upload_frame(f);
     }
 
     void device_model::start_recording(const std::string& path, std::string& error_message)

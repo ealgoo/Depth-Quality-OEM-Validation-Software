@@ -288,7 +288,7 @@ namespace rs2
     {
     public:
         stream_model();
-		texture_buffer* upload_frame(frame&& f);
+		texture_buffer* upload_frame(frame f);
         bool is_stream_visible();
         void update_ae_roi_rect(const rect& stream_rect, const mouse_info& mouse, std::string& error_message);
         void show_frame(const rect& stream_rect, const mouse_info& g, std::string& error_message);
@@ -604,7 +604,7 @@ namespace rs2
             not_model.add_log(to_string() << "librealsense version: " << api_version_to_string(rs2_get_api_version(&e)) << "\n");
         }
 
-		texture_buffer* upload_frame(frame&& f, points* p);
+		texture_buffer* upload_frame(frame f, points* p);
 
         std::map<int, rect> calc_layout(const rect& r, bool calwPC = false);
 

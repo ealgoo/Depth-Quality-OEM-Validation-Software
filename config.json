@@ -7,6 +7,8 @@
 		"RMSFittingPlanePassRate": 2,
 		"RMSSubpixelPassRate": 0.15,
 		"ROIPercentage": 80,
-		"MaxAngle": 5
+		"MaxAngle": 5,
+		"StartCpatureIndex": 170,
+		"EndCaptureIndex": 180,
 	}
 }
