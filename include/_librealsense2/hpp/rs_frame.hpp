@@ -42,14 +42,6 @@ namespace rs2
             return res;
         }
 
-        bool operator==(const stream_profile& rhs)
-        {
-            return  stream_index() == rhs.stream_index()&&
-                    stream_type() == rhs.stream_type()&&
-                    format() == rhs.format()&&
-                    fps() == rhs.fps();
-        }
-
         template<class T>
         bool is() const
         {
@@ -78,10 +70,6 @@ namespace rs2
 
         const rs2_stream_profile* get() const { return _profile; }
 
-        operator const rs2_stream_profile*()
-        {
-            return _profile;
-        }
         rs2_extrinsics get_extrinsics_to(const stream_profile& to) const
         {
             rs2_error* e = nullptr;
@@ -90,18 +78,11 @@ namespace rs2
             error::handle(e);
             return res;
         }
-        void register_extrinsics_to(const stream_profile& to, rs2_extrinsics extrinsics)
-        {
-            rs2_error* e = nullptr;
-            rs2_register_extrinsics(get(), to.get(), extrinsics, &e);
-            error::handle(e);
-        }
 
     protected:
         friend class rs2::sensor;
         friend class rs2::frame;
         friend class rs2::pipeline_profile;
-        friend class software_sensor;
 
         explicit stream_profile(const rs2_stream_profile* profile) : _profile(profile)
         {
@@ -170,35 +151,6 @@ namespace rs2
         int _height = 0;
     };
 
-
-    class motion_stream_profile : public stream_profile
-    {
-    public:
-        explicit motion_stream_profile(const stream_profile& sp)
-            : stream_profile(sp)
-        {
-            rs2_error* e = nullptr;
-            if ((rs2_stream_profile_is(sp.get(), RS2_EXTENSION_MOTION_PROFILE, &e) == 0 && !e))
-            {
-                _profile = nullptr;
-            }
-            error::handle(e);
-        }
-
-        /**
-        * returns scale and bias of a the motion stream profile
-        */
-        rs2_motion_device_intrinsic get_motion_intrinsics() const
-
-        {
-            rs2_error* e = nullptr;
-            rs2_motion_device_intrinsic intrin;
-            rs2_get_motion_intrinsics(_profile, &intrin, &e);
-            error::handle(e);
-            return intrin;
-        }
-    };
-
     class frame
     {
     public:
@@ -206,21 +158,13 @@ namespace rs2
         frame(rs2_frame* frame_ref) : frame_ref(frame_ref)
         {
 #ifdef _DEBUG
-            if (frame_ref)
-            {
-                rs2_error* e = nullptr;
-                auto r = rs2_get_frame_number(frame_ref, &e);
-                if (!e)
-                    frame_number = r;
-                auto s = rs2_get_frame_stream_profile(frame_ref, &e);
-                if (!e)
-                    profile = stream_profile(s);
-            }
-            else
-            {
-                frame_number = 0;
-                profile = stream_profile();
-            }
+            rs2_error* e = nullptr;
+            auto r = rs2_get_frame_number(frame_ref, &e);
+            if (!e)
+                frame_number = r;
+            auto s = rs2_get_frame_stream_profile(frame_ref, &e);
+            if (!e)
+                profile = stream_profile(s);
 #endif
         }
 
@@ -241,10 +185,6 @@ namespace rs2
             : frame_ref(other.frame_ref)
         {
             if (frame_ref) add_ref();
-#ifdef _DEBUG
-            frame_number = other.frame_number;
-            profile =  other.profile;
-#endif
         }
         void swap(frame& other)
         {
@@ -257,7 +197,7 @@ namespace rs2
         }
 
         /**
-        * releases the frame handle
+        * relases the frame handle
         */
         ~frame()
         {
@@ -266,8 +206,6 @@ namespace rs2
                 rs2_release_frame(frame_ref);
             }
         }
-
-        void keep() { rs2_keep_frame(frame_ref); }
 
         operator bool() const { return frame_ref != nullptr; }
 
@@ -320,7 +258,7 @@ namespace rs2
 
         /**
         * retrieve frame number (from frame handle)
-        * \return               the frame number of the frame, in milliseconds since the device was started
+        * \return               the frame nubmer of the frame, in milliseconds since the device was started
         */
         unsigned long long get_frame_number() const
         {
@@ -582,51 +520,6 @@ namespace rs2
         }
     };
 
-    class motion_frame : public frame
-    {
-    public:
-        motion_frame(const frame& f)
-            : frame(f)
-        {
-            rs2_error* e = nullptr;
-            if (!f || (rs2_is_frame_extendable_to(f.get(), RS2_EXTENSION_MOTION_FRAME, &e) == 0 && !e))
-            {
-                reset();
-            }
-            error::handle(e);
-        }
-
-        rs2_vector get_motion_data()
-        {
-            auto data = reinterpret_cast<const float*>(get_data());
-            return rs2_vector{data[0], data[1], data[2]};
-        }
-    };
-
-    class pose_frame : public frame
-    {
-    public:
-        pose_frame(const frame& f)
-            : frame(f)
-        {
-            rs2_error* e = nullptr;
-            if (!f || (rs2_is_frame_extendable_to(f.get(), RS2_EXTENSION_POSE_FRAME, &e) == 0 && !e))
-            {
-                reset();
-            }
-            error::handle(e);
-        }
-
-        rs2_pose get_pose_data()
-        {
-            rs2_pose pose_data;
-            rs2_error* e = nullptr;
-            rs2_pose_frame_get_pose_data(get(), &pose_data, &e);
-            error::handle(e);
-            return pose_data;
-        }
-    };
-
     class frameset : public frame
     {
     public:
@@ -687,24 +580,6 @@ namespace rs2
             }
             return f;
         }
-
-        video_frame get_infrared_frame(const size_t index = 0) const
-        {
-            frame f;
-            if (!index)
-            {
-                f = first_or_default(RS2_STREAM_INFRARED);
-            }
-            else
-            {
-                foreach([&f, index](const frame& frame) {
-                    if (frame.get_profile().stream_type() == RS2_STREAM_INFRARED && frame.get_profile().stream_index() == index)
-                        f = frame;
-                });
-            }
-            return f;
-        }
-
         size_t size() const
         {
             return _size;

@@ -47,7 +47,7 @@ using namespace nlohmann;
 #define TIME_TO_CAPTURE 3
 #define TESTING_TIME	6
 #define MAJOR_VERSION 1
-#define MINOR_VERSION 5
+#define MINOR_VERSION 6
 #define PATCH_VERSION 0
 
 bool gStartCapture = false, gStartTesting = false, gJoinTrigger = false;
@@ -56,154 +56,6 @@ region_of_interest gRoi = { -1, -1, -1, -1 };
 int gCalculate_sts = -1;
 float gOffsetRatio = 0;
 notifications_model* gNotModel;
-
-#ifdef _WIN32
-HANDLE gStopThreadEvent, gStartTestingEvent, gSaveImageEvent, gSaveFinishEvent;
-#else
-static pthread_cond_t testCon;
-static pthread_mutex_t testMtx;
-static pthread_cond_t saveImgCon;
-static pthread_mutex_t saveImgMtx;
-pthread_t testThread;
-pthread_t saveImgThread;
-unsigned int testSts = 0;
-unsigned int saveImgSts = 0;
-#define TEST 1
-#define SAVEIMG 1
-#define SAVECOMP 2
-#define ENDTEST 4
-#endif
-
-
-#ifdef _WIN32
-void testingThreadFun() {
-
-	HANDLE handle[3];
-	handle[0] = gStartTestingEvent;
-	handle[1] = gSaveFinishEvent;
-	handle[2] = gStopThreadEvent;
-
-	int saveCount = 0;
-
-	while (true)
-	{
-		auto res = WaitForMultipleObjects(3, handle, FALSE, INFINITE);
-		if (res == WAIT_OBJECT_0)
-		{
-			std::this_thread::sleep_for(std::chrono::seconds(TIME_TO_CAPTURE));
-			gStartCapture = true;
-		}
-		else if (res == WAIT_OBJECT_0 + 1)
-		{
-			//saveCount++;
-			//if (saveCount == gStreamCount)
-			//{
-				gStartTesting = false;
-				//saveCount = 0;
-			//}
-		}
-		else
-		{
-			return;
-		}
-	}
-}
-#else
-void* testingThreadFun(void* context) {
-	pthread_mutex_lock(&testMtx);
-	int saveCount = 0;
-	while (true)
-	{
-		pthread_cond_wait(&testCon, &testMtx);
-		if (testSts & TEST)
-		{
-			std::this_thread::sleep_for(std::chrono::seconds(TIME_TO_CAPTURE));
-			gStartCapture = true;
-			//std::this_thread::sleep_for(std::chrono::seconds(TESTING_TIME - TIME_TO_CAPTURE));
-			//gStartTesting = false;
-		}
-		else if (testSts & SAVECOMP)
-		{
-			saveCount++;
-			if (saveCount == gStreamCount)
-			{
-				gStartTesting = false;
-				saveCount = 0;
-			}
-
-		}
-		else if (testSts & ENDTEST)
-			break;
-		testSts = 0;
-	}
-	pthread_mutex_unlock(&testMtx);
-}
-#endif
-
-/*#ifdef _WIN32
-void testingThreadFun() {
-
-	HANDLE handle[3];
-	handle[0] = gStartTestingEvent;
-	handle[1] = gSaveFinishEvent;
-	handle[2] = gStopThreadEvent;
-
-	int saveCount = 0;
-
-	while (true)
-	{
-		auto res = WaitForMultipleObjects(3, handle, FALSE, INFINITE);
-		if (res == WAIT_OBJECT_0)
-		{
-			std::this_thread::sleep_for(std::chrono::seconds(TIME_TO_CAPTURE));
-			gStartCapture = true;
-		}
-		else if (res == WAIT_OBJECT_0 + 1)
-		{
-			saveCount++;
-			if (saveCount == gStreamCount)
-			{
-				gStartTesting = false;
-				saveCount = 0;
-			}
-		}
-		else
-		{
-			return;
-		}
-	}
-}
-#else
-void* testingThreadFun(void* context){
-	pthread_mutex_lock(&testMtx);
-        int saveCount = 0;
-	while(true)
-	{
-		pthread_cond_wait(&testCon, &testMtx);
-		if(testSts & TEST)
-		{
-			std::this_thread::sleep_for(std::chrono::seconds(TIME_TO_CAPTURE));
-			gStartCapture = true;
-                        //std::this_thread::sleep_for(std::chrono::seconds(TESTING_TIME - TIME_TO_CAPTURE));
-                        //gStartTesting = false;
-		}
-                else if(testSts & SAVECOMP)
-                {
-                    saveCount++;
-                    if (saveCount == gStreamCount)
-                    {
-                            gStartTesting = false;
-                            saveCount = 0;
-                    }
-
-                }
-		else if(testSts & ENDTEST)
-			break;
-		testSts = 0;
-	}
-	pthread_mutex_unlock(&testMtx);
-}
-#endif*/
 
 struct angles {
 	float angle;
@@ -376,7 +228,6 @@ std::queue<std::shared_ptr<saved_frame_data>> gDataPtr_queue;
 std::string gCsvName;
 test_result gResult;
 
-//void saveResult(test_result* result)
 test_result saveResult()
 {
 	std::string pf = "";
@@ -386,7 +237,6 @@ test_result saveResult()
 	test_result ret;
 
 	double accuracyTotal = 0, fillRateTotal = 0, RMSTotal = 0, totalAngle = 0;
-	//fileStream << "Serial," << result->serialNumStr << ",Angle," << result->_angles.angle << ",Angle_x," << -90 + rotateTheta(result->_angles.angle_x) << ",Angle_y," << -90 + rotateTheta(result->_angles.angle_y) << ",Z-Accuracy(%)," << result->accuracy << ",Fill Rate(%)," << result->fillRate << ",Spatial Noise(%)," << result->rmsFittingPlane << ",Result," << pf << "\n";
 	fileStream << "Serial,Angle,Angle_x,Angle_y,Z-Accuracy(%),Z-Accuracy(mm),Fill Rate(%),Spatial Noise(%),Spatial Noisze(mm)\n";
 	for (auto&& result : gResultPtr_vec)
 	{
@@ -398,8 +248,6 @@ test_result saveResult()
 		result->clear();
 	}
 	int size = gResultPtr_vec.size();
-	//std::ofstream save_file(result->csvFileName, std::ofstream::binary);
-	//save_file.write((char*)fileStream.str().data(), fileStream.str().size());
 	ret.accuracy = accuracyTotal / size; ret.fillRate = fillRateTotal / size; ret.rmsFittingPlane = RMSTotal / size; ret._angles.angle = totalAngle / size;
 
 	gCalculate_sts = calTestResult(&ret);
@@ -414,9 +262,6 @@ test_result saveResult()
 
 #ifndef _WIN32
 struct CalResultStrut{
-	rs2::frame* frame;
-	unsigned short* data;
-	test_result* result;
 	float baseline_mm;
 	rs2_intrinsics intrin;
 };
@@ -444,17 +289,14 @@ void calResultThreadFun( float baseline_mm, rs2_intrinsics intrin) {
 #else
 void* calResultThreadFun(void* ctx) {
 	CalResultStrut* resultSet = (CalResultStrut*)ctx;
-	frame* _frame = resultSet->frame; unsigned short* data = resultSet->data; test_result* result = resultSet->result; float baseline_mm = resultSet->baseline_mm; rs2_intrinsics intrin = resultSet->intrin;
+        float baseline_mm = resultSet->baseline_mm; rs2_intrinsics intrin = resultSet->intrin;
 #endif
-	//video_frame vframe = _frame->as<video_frame>();
 	while (true)
 	{
 		std::shared_ptr<saved_frame_data> frame_data = gDataPtr_queue.front();
 		gDataPtr_queue.pop();
 		video_frame vframe = frame_data->_frame->as<video_frame>();
 		int actual_w = vframe.get_width(), actual_h = vframe.get_height();
-
-		//auto res = analyze_depth_image(data, actual_w, actual_h, 0.001, baseline_mm, &intrin);
 		auto res = analyze_depth_image(frame_data->depthImg, actual_w, actual_h, 0.001, baseline_mm, &intrin);
 		std::shared_ptr<test_result> result = std::make_shared<test_result>();
 		result->fillRate = res.data[snapshot_metrics::FILLRATE];
@@ -464,14 +306,12 @@ void* calResultThreadFun(void* ctx) {
 		result->accuracy_mm = res.data[snapshot_metrics::ACCURACY_MM];
 		result->rmsFittingPlane_mm = res.data[snapshot_metrics::FITTING_RMS_MM];
 		result->_angles = res._angles;
-		//drawTestPicture(_frame->as<video_frame>(), result);
 		gResultPtr_vec.push_back(result);
 
 
 		std::this_thread::sleep_for(std::chrono::milliseconds(10));//time for queue to be filled, before checking if queue is empty
 		if (gDataPtr_queue.empty())
 		{
-			//SetEvent(gStopThreadEvent);
 			gResult = saveResult();
 			drawTestPicture(frame_data->_frame->as<video_frame>(), &gResult);
 			saveImages(*frame_data);
@@ -479,95 +319,10 @@ void* calResultThreadFun(void* ctx) {
 			{
 				saveImages(*toBeSaved);
 			}
-			//delete frame_data;
 			frame_data->clear();
 			break;
 		}
 		frame_data->clear();
-	}
-		
-/*#ifdef _WIN32
-	SetEvent(gSaveImageEvent);
-#else
-	pthread_mutex_lock(&saveImgMtx);
-	pthread_cond_signal(&saveImgCon);
-	pthread_cond_signal(&saveImgCon);
-	pthread_cond_signal(&saveImgCon);
-	pthread_cond_signal(&saveImgCon);
-	pthread_mutex_unlock(&saveImgMtx);
-#endif*/
-}
-
-/*
-#ifdef _WIN32
-void calResultThreadFun(frame* _frame, unsigned short* data, test_result* result, float baseline_mm, rs2_intrinsics intrin) {
-#else
-void* calResultThreadFun(void* ctx) {
-	CalResultStrut* resultSet = (CalResultStrut*)ctx;
-	frame* _frame = resultSet->frame; unsigned short* data = resultSet->data; test_result* result = resultSet->result; float baseline_mm = resultSet->baseline_mm; rs2_intrinsics intrin = resultSet->intrin;
-#endif
-	video_frame vframe = _frame->as<video_frame>();
-	int actual_w = vframe.get_width(), actual_h = vframe.get_height();
-
-	auto res = analyze_depth_image(data, actual_w, actual_h, 0.001, baseline_mm, &intrin);
-	result->fillRate = res.data[snapshot_metrics::FILLRATE];
-	result->rmsFittingPlane = res.data[snapshot_metrics::FITTING_RMS];
-	result->rmsSubpixel = res.data[snapshot_metrics::SUBPIXEL];
-	result->accuracy = res.data[snapshot_metrics::ACCURACY];
-        result->_angles = res._angles;
-	drawTestPicture(_frame->as<video_frame>(), result);
-	saveResult(result);
-#ifdef _WIN32
-	SetEvent(gSaveImageEvent);
-#else
-	pthread_mutex_lock(&saveImgMtx);
-	pthread_cond_signal(&saveImgCon);
-	pthread_cond_signal(&saveImgCon);
-	pthread_cond_signal(&saveImgCon);
-        pthread_cond_signal(&saveImgCon);
-	pthread_mutex_unlock(&saveImgMtx);
-#endif
-}*/
-
-#ifdef _WIN32
-void saveFrameThreadFun(saved_frame_data data) {
-#else
-void* saveFrameThreadFun(void* _data){
-	saved_frame_data data = *(saved_frame_data*)_data;
-#endif
-	try {
-#ifdef _WIN32
-		WaitForSingleObject(gSaveImageEvent, INFINITE);
-#else
-		pthread_mutex_lock(&saveImgMtx);
-		pthread_cond_wait(&saveImgCon, &saveImgMtx);
-		pthread_mutex_unlock(&saveImgMtx);
-#endif
-		std::lock_guard<std::mutex> lock(locker);
-		video_frame frame = data._frame->as<video_frame>();
-		std::string filenamePng = data.filename + ".png";
-		//std::string filenamePly = data.filename + ".ply";
-		stbi_write_png(filenamePng.data(), frame.get_width(), frame.get_height(), frame.get_bytes_per_pixel(), frame.get_data(), frame.get_width() * frame.get_bytes_per_pixel());
-		//data.not_model->add_notification({ to_string() << "Snapshot was saved to " << filenamePng.data(),
-		//0, RS2_LOG_SEVERITY_INFO,
-		//RS2_NOTIFICATION_CATEGORY_UNKNOWN_ERROR});
-#ifdef _WIN32
-		SetEvent(gSaveFinishEvent);
-#else
-                pthread_mutex_lock(&testMtx);
-                testSts |= SAVECOMP;
-                pthread_cond_signal(&testCon);
-                pthread_mutex_unlock(&testMtx);
-#endif
-		/*if (data._points != nullptr)
-		{
-			//export_to_ply(filenamePly, *(data.not_model), *data._points, frame);
-			export_to_ply(filenamePly, *(data.not_model), *data._points, frame);
-		}*/
-	}
-	catch (const std::exception& e)
-	{
-		const char* error_message = e.what();
 	}
 }
 
@@ -616,13 +371,6 @@ void setFontForWindow(ImFont*& selected_font, ImFont* _18Font, ImFont* _14Font)
 	const GLFWvidmode * mode = glfwGetVideoMode(glfwGetPrimaryMonitor());
     if(mode->width > 1280 && mode->height > 1024)
 		selected_font = _18Font;
-}
-
-typedef void (*FinishCallBack)(std::thread*);
-void witingForThreadFinish(FinishCallBack action, std::thread* _thread)
-{
-	_thread->join();
-	action(_thread);
 }
 
 #pragma region Depth_Result_Cal
@@ -892,7 +640,6 @@ void startStreams(float& baseline, rs2_intrinsics& intrin, stream_format_idx sfI
 		profilesColor = colorDev->get_selected_profiles();
 	}
 	auto profiles = depthDev->get_selected_profiles();
-	//auto profilesColor = colorDev->get_selected_profiles();
 	//get baseline while test
 	stream_profile left_s, right_s;
 	for (auto p : profiles)
@@ -1069,20 +816,6 @@ int main(int, char**) try
         }
         refresh_device_list = true;
     });
-
-#ifdef _WIN32
-	gStartTestingEvent = CreateEvent(NULL, FALSE, FALSE, TEXT("startTesting"));
-	gStopThreadEvent = CreateEvent(NULL, FALSE, FALSE, TEXT("stopTesting"));
-	gSaveImageEvent = CreateEvent(NULL, TRUE, FALSE, TEXT("saveImage"));
-	gSaveFinishEvent = CreateEvent(NULL, FALSE, FALSE, TEXT("saveImageFinish"));
-	//std::thread testingThread = std::thread(&testingThreadFun);
-#else
-	pthread_mutex_init(&testMtx, NULL);
-	pthread_mutex_init(&saveImgMtx, NULL);
-	pthread_cond_init(&testCon, NULL);
-	pthread_cond_init(&saveImgCon, NULL);
-	pthread_create(&testThread, NULL, &testingThreadFun, NULL);
-#endif
 
 	//set notification model to global use
 	gNotModel = &mViewer_model.not_model;
@@ -1536,18 +1269,14 @@ int main(int, char**) try
 								isStreaming = subDepth->streaming;
 								gCalculate_sts = -1;
 								gStartTesting = true;
-								//gJoinTrigger = true;
 								showResult = false;
 								isPreview = false;
-								gCsvName = resultFolder + "\\" + device_models[0].dev.get_info(RS2_CAMERA_INFO_NAME) + "_" + device_models[0].dev.get_info(RS2_CAMERA_INFO_SERIAL_NUMBER) + "_" + std::to_string(testIdx) + ".csv";
 #ifdef _WIN32
-								//SetEvent(gStartTestingEvent);
+								gCsvName = resultFolder + "\\" + device_models[0].dev.get_info(RS2_CAMERA_INFO_NAME) + "_" + device_models[0].dev.get_info(RS2_CAMERA_INFO_SERIAL_NUMBER) + "_" + std::to_string(testIdx) + ".csv";
 #else
-								pthread_mutex_lock(&testMtx);
-								testSts |= TEST;
-								pthread_cond_signal(&testCon);
-								pthread_mutex_unlock(&testMtx);
+								gCsvName = resultFolder + "/" + device_models[0].dev.get_info(RS2_CAMERA_INFO_NAME) + "_" + device_models[0].dev.get_info(RS2_CAMERA_INFO_SERIAL_NUMBER) + "_" + std::to_string(testIdx) + ".csv"; 
 #endif
+
 							}
 							if (isStreaming && !isPreview)//test is running
 							{
@@ -1566,8 +1295,6 @@ int main(int, char**) try
 							}
 						}
 
-						//isStreaming = subDepth->streaming;
-
 						ImGui::SetCursorPosX(70);
 						ImGui::SetCursorPosY(abs_pos.y + 120);
 
@@ -1575,8 +1302,6 @@ int main(int, char**) try
 
 						if (showResult)
 						{
-							//if (gCalculate_sts == -1)
-								//gCalculate_sts = calTestResult(testResult);
 							if(gCalculate_sts == 1)
 							{
 								ImGui::GetWindowDrawList()->AddRectFilled({ abs_pos.x, abs_pos.y }, { abs_pos.x + 160, abs_pos.y + 150 }, ImColor(from_rgba(0, 255, 0, 0xff)));
@@ -1631,9 +1356,6 @@ int main(int, char**) try
 						if (queue.poll_for_frame(&f))//filter will be applied here if apply filiter is activated.
 						{
 							auto temp_texture = mViewer_model.upload_frame(f, &p);
-							//select RGB as texture
-							//if (f.get_profile().format() == RS2_FORMAT_Y8 || f.get_profile().unique_id() == sfIdx.infra1SIdx)
-								//texture_frame = temp_texture;
 							if (gStartTesting && f.get_profile().stream_type() == RS2_STREAM_DEPTH)
 								frameCounter++;
 						}
@@ -1677,7 +1399,6 @@ int main(int, char**) try
 				}
 				ImGui::PopFont();
 			}
-			//mViewer_model.render_3d_view(layout[DUMMY_PC_STREAM_ID], texture_frame, p);
 			mViewer_model.render_3d_view(layout[DUMMY_PC_STREAM_ID], nullptr, p);
 		}
 		
@@ -1717,12 +1438,6 @@ int main(int, char**) try
 
 			if (stream == sfIdx.depthSIdx)//depth stream
 			{
-				/*if (gStartTesting)
-				{
-					if(frameCounter == 0)
-						std::this_thread::sleep_for(std::chrono::milliseconds(100));
-					frameCounter++;
-				}*/
 				GLfloat x = stream_rect.x + stream_rect.w * (0.5 - 0.5 * gConfig.ROIPercent * 0.01);
 				GLfloat y = stream_rect.y + stream_rect.h * (0.5 - 0.5 * gConfig.ROIPercent * 0.01);
 				GLfloat w = (stream_rect.x + stream_rect.w * (0.5 + 0.5 * gConfig.ROIPercent * 0.01)) - x;
@@ -1738,7 +1453,6 @@ int main(int, char**) try
 				glEnd();
 			}
 
-			//if (gStartCapture)
 			if (frameCounter > gConfig.startCaptureIdx && frameCounter <= gConfig.endCaptureIdx)
 			{
 				std::string filename;
@@ -1756,7 +1470,6 @@ int main(int, char**) try
 					colorizer colorRizer;
 					std::shared_ptr<saved_frame_data> data = std::make_shared<saved_frame_data>();
 					data->filename = filename;
-					//frameData[saveImgidx].filename = filename;
 					if (stream == sfIdx.depthSIdx)
 					{
 						//depth will be used to calculate the result each frame, while the others only used to be saved, so will capture only the last one frame of color, ir, ir1 to save.
@@ -1767,41 +1480,23 @@ int main(int, char**) try
 						data->_points = new points(p.get());
 						data->_frame = new rs2::frame(colorRizer(std::move(frame)));
 						gDataPtr_queue.push(data);
-						//data->_frame = new rs2::frame(colorRizer(frame));
-						//frameData[saveImgidx]._points = new points(p.get());
-						//frameData[saveImgidx]._frame = new rs2::frame(colorRizer.colorize(frame));
 					}
 					else if (frameCounter == gConfig.endCaptureIdx)
 					{
 						data->filename = filename;
 						data->_frame = new rs2::frame(std::move(frame));
 						gToBeSaved_vec.push_back(data);
-						//frameData[saveImgidx]._frame = new rs2::frame(std::move(frame));
-					//frameData[saveImgidx].not_model = &mViewer_model.not_model;
 					}
 
 #ifdef _WIN32
-					//saveThread[saveImgidx] = new std::thread(saveFrameThreadFun, frameData[saveImgidx]);
+					if(frameCounter == gConfig.endCaptureIdx && calResultThread == nullptr)
+						calResultThread = new std::thread(calResultThreadFun, baseline_mm, intrin);
 #else
-					pthread_create(&saveThread[saveImgidx], NULL, saveFrameThreadFun, (void*)&frameData[saveImgidx]);
-#endif
-					//if (stream == sfIdx.depthSIdx)//depth stream
-					//{
-#ifdef _WIN32
-						//testResult.csvFileName = resultFolder + "\\" + device_models[0].dev.get_info(RS2_CAMERA_INFO_NAME) + "_" + device_models[0].dev.get_info(RS2_CAMERA_INFO_SERIAL_NUMBER) + "_" + std::to_string(testIdx);
-						//if (!ends_with(to_lower(testResult.csvFileName), ".csv")) testResult.csvFileName += ".csv";
-						//calResultThread = new std::thread(calResultThreadFun, frameData[saveImgidx]._frame, depthImg, &testResult, baseline_mm, intrin);
-
-						if(frameCounter == gConfig.endCaptureIdx && calResultThread == nullptr)
-							calResultThread = new std::thread(calResultThreadFun, baseline_mm, intrin);
-#else
-						testResult.csvFileName = resultFolder + "/" + device_models[0].dev.get_info(RS2_CAMERA_INFO_NAME) + "_" + device_models[0].dev.get_info(RS2_CAMERA_INFO_SERIAL_NUMBER) + "_" + std::to_string(testIdx);
-						if (!ends_with(to_lower(testResult.csvFileName), ".csv")) testResult.csvFileName += ".csv";
-						testDataSet.frame = frameData[saveImgidx]._frame; testDataSet.data = depthImg; testDataSet.result = &testResult; testDataSet.baseline_mm = baseline_mm; testDataSet.intrin = intrin;
+					if(frameCounter == gConfig.endCaptureIdx && calResultThread == NULL){
+                                        	testDataSet.baseline_mm = baseline_mm; testDataSet.intrin = intrin;
 						pthread_create(&calResultThread, NULL, calResultThreadFun, (void*)&testDataSet);
+					}
 #endif
-					//}
-					//saveImgidx++;
 				}
 			}
 
@@ -1809,124 +1504,15 @@ int main(int, char**) try
 			{
 				frameCounter = 0;
 				gStartTesting = false;
+				testIdx++;
+#ifdef _WIN32
+
 				calResultThread->join();
 				calResultThread = nullptr;
-				/*witingForThreadFinish([](std::thread* _thread)->void {
-					_thread = nullptr;
-				}, calResultThread);*/
-				testIdx++;
-				//gJoinTrigger = false;
-#ifdef _WIN32
-				//ResetEvent(gSaveImageEvent);
-				/*for (int i = 0; i < gStreamCount; i++)
-				{
-					if (saveThread[i] != nullptr && saveThread[i]->joinable())
-						saveThread[i]->join();
-					frameData[i].clear();
-					delete saveThread[i];
-				}
-
-				if (calResultThread != nullptr && calResultThread->joinable())
-				{
-					calResultThread->join();
-					delete calResultThread;
-				}*/
 #else
-				for (int i = 0; i < gStreamCount; i++)
-				{
-					pthread_join(saveThread[i], NULL);
-					frameData[i].clear();
-				}
 				pthread_join(calResultThread, NULL);
 #endif
 			}
-			/*if (gStartCapture)
-			{
-#ifdef _WIN32
-				std::string filename = resultFolder + "\\" + device_models[0].dev.get_info(RS2_CAMERA_INFO_NAME) + "_" + device_models[0].dev.get_info(RS2_CAMERA_INFO_SERIAL_NUMBER) + "_" + stream_mv.dev->stream_display_names[stream] + "_" + std::to_string(testIdx);
-#else
-				std::string filename = resultFolder + "/" + device_models[0].dev.get_info(RS2_CAMERA_INFO_NAME) + "_" + device_models[0].dev.get_info(RS2_CAMERA_INFO_SERIAL_NUMBER) + "_" + stream_mv.dev->stream_display_names[stream] + "_" + std::to_string(testIdx);
-#endif
-				auto frame = stream_mv.texture->get_last_frame();
-				if (frame)
-				{
-					colorizer colorRizer;
-					frameData[saveImgidx].filename = filename;
-					if (stream == sfIdx.depthSIdx)
-					{
-						int w = frame.as<video_frame>().get_width();
-						int h = frame.as<video_frame>().get_height();
-						depthImg = new unsigned short[w*h];
-						memcpy(depthImg, frame.get_data(), w*h * 2);
-						frameData[saveImgidx]._points = new points(p.get());
-						frameData[saveImgidx]._frame = new rs2::frame(colorRizer.colorize(frame));
-					}
-					else
-						frameData[saveImgidx]._frame = new rs2::frame(std::move(frame));
-					frameData[saveImgidx].not_model = &mViewer_model.not_model;
-
-#ifdef _WIN32
-					//saveThread[saveImgidx] = new std::thread(saveFrameThreadFun, frameData[saveImgidx]);
-#else
-					pthread_create(&saveThread[saveImgidx], NULL, saveFrameThreadFun, (void*)&frameData[saveImgidx]);
-#endif
-					if (stream == sfIdx.depthSIdx)//depth stream
-					{
-#ifdef _WIN32
-						testResult.csvFileName = resultFolder + "\\" + device_models[0].dev.get_info(RS2_CAMERA_INFO_NAME) + "_" + device_models[0].dev.get_info(RS2_CAMERA_INFO_SERIAL_NUMBER) + "_" + std::to_string(testIdx);
-						if (!ends_with(to_lower(testResult.csvFileName), ".csv")) testResult.csvFileName += ".csv";
-						//calResultThread = new std::thread(calResultThreadFun, frameData[saveImgidx]._frame, depthImg, &testResult, baseline_mm, intrin);
-						calResultThread = new std::thread(calResultThreadFun, frameData[saveImgidx], depthImg, &testResult, baseline_mm, intrin);
-#else
-						testResult.csvFileName = resultFolder + "/" + device_models[0].dev.get_info(RS2_CAMERA_INFO_NAME) + "_" + device_models[0].dev.get_info(RS2_CAMERA_INFO_SERIAL_NUMBER) + "_" + std::to_string(testIdx);
-						if (!ends_with(to_lower(testResult.csvFileName), ".csv")) testResult.csvFileName += ".csv";
-						testDataSet.frame = frameData[saveImgidx]._frame; testDataSet.data = depthImg; testDataSet.result = &testResult; testDataSet.baseline_mm = baseline_mm; testDataSet.intrin = intrin;
-						pthread_create(&calResultThread, NULL, calResultThreadFun, (void*)&testDataSet);
-#endif
-					}
-					saveImgidx++;
-				}
-			}
-		}*/
-		
-		//reset the capture flag only when saveImag did happen before, checking saveImgidx
-		/*if (gStartCapture && saveImgidx != 0)
-		{
-			saveImgidx = 0;
-			gStartCapture = false;
-			testIdx++;
-		}
-
-		//Means testing has ended, join all the thread
-		if (!gStartTesting && gJoinTrigger)
-		{
-			gJoinTrigger = false;
-#ifdef _WIN32
-			ResetEvent(gSaveImageEvent);
-			for (int i = 0; i < gStreamCount; i++)
-			{
-				if(saveThread[i] != nullptr && saveThread[i]->joinable())
-					saveThread[i]->join();
-				frameData[i].clear();
-				delete saveThread[i];
-			}
-
-			if (calResultThread != nullptr && calResultThread->joinable())
-			{
-				calResultThread->join();
-				delete calResultThread;
-			}
-#else
-			for(int i=0; i<gStreamCount; i++)
-			{
-				pthread_join(saveThread[i], NULL);
-				frameData[i].clear();
-			}
-			pthread_join(calResultThread, NULL);
-#endif
-*/
-			//
-			//delete depthImg;
 		}
 
 		// Metadata overlay windows shall be drawn after textures to preserve z-buffer functionality
@@ -1957,22 +1543,6 @@ int main(int, char**) try
 			}
 		}
     }
-
-#ifdef _WIN32
-	SetEvent(gStopThreadEvent);
-	//if(testingThread.joinable())
-		//testingThread.join();
-	CloseHandle(gStartTestingEvent);
-	CloseHandle(gStopThreadEvent);
-	CloseHandle(gSaveFinishEvent);
-	CloseHandle(gSaveImageEvent);
-#else
-	pthread_mutex_lock(&testMtx);
-	testSts |= ENDTEST;
-	pthread_cond_signal(&testCon);
-	pthread_mutex_unlock(&testMtx);
-	pthread_join(testThread, NULL);
-#endif
 
     // Stop all subdevices
     for (auto&& device_model : device_models)

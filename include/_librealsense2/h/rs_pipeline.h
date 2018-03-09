@@ -15,7 +15,6 @@ extern "C" {
 #endif
 
 #include "rs_types.h"
-#include "rs_sensor.h"
 
     /**
     * Create a pipeline instance

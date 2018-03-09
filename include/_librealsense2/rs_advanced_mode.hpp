@@ -270,7 +270,7 @@ namespace rs400
             rs2_error* e = nullptr;
             rs2_load_json(_dev.get(),
                           json_content.data(),
-                          (unsigned int)json_content.size(),
+                          json_content.size(),
                           &e);
             rs2::error::handle(e);
         }

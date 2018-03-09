@@ -18,7 +18,6 @@ typedef enum rs2_notification_category{
     RS2_NOTIFICATION_CATEGORY_FRAMES_TIMEOUT,   /**< Frames didn't arrived within 5 seconds */
     RS2_NOTIFICATION_CATEGORY_FRAME_CORRUPTED,  /**< Received partial/incomplete frame */
     RS2_NOTIFICATION_CATEGORY_HARDWARE_ERROR,   /**< Error reported from the device */
-    RS2_NOTIFICATION_CATEGORY_HARDWARE_EVENT,   /**< General Hardeware notification that is not an error */
     RS2_NOTIFICATION_CATEGORY_UNKNOWN_ERROR,    /**< Received unknown error from the device */
     RS2_NOTIFICATION_CATEGORY_COUNT             /**< Number of enumeration values. Not a valid input: intended to be used in for-loops. */
 } rs2_notification_category;
@@ -47,7 +46,7 @@ typedef enum rs2_distortion
     RS2_DISTORTION_INVERSE_BROWN_CONRADY , /**< Equivalent to Brown-Conrady distortion, except undistorts image instead of distorting it */
     RS2_DISTORTION_FTHETA                , /**< F-Theta fish-eye distortion model */
     RS2_DISTORTION_BROWN_CONRADY         , /**< Unmodified Brown-Conrady distortion model */
-    RS2_DISTORTION_COUNT                   /**< Number of enumeration values. Not a valid input: intended to be used in for-loops. */
+    RS2_DISTORTION_COUNT                 , /**< Number of enumeration values. Not a valid input: intended to be used in for-loops. */
 } rs2_distortion;
 const char* rs2_distortion_to_string(rs2_distortion distortion);
 
@@ -63,19 +62,6 @@ typedef struct rs2_intrinsics
     rs2_distortion model;     /**< Distortion model of the image */
     float         coeffs[5]; /**< Distortion coefficients */
 } rs2_intrinsics;
-
-/** \brief Motion device intrinsics: scale, bias, and variances */
-typedef struct rs2_motion_device_intrinsic
-{
-    /* \internal
-    * Scale X       cross axis  cross axis  Bias X \n
-    * cross axis    Scale Y     cross axis  Bias Y \n
-    * cross axis    cross axis  Scale Z     Bias Z */
-    float data[3][4];          /**< Interpret data array values */
-
-    float noise_variances[3];  /**< Variance of noise for X, Y, and Z axis */
-    float bias_variances[3];   /**< Variance of bias for X, Y, and Z axis */
-} rs2_motion_device_intrinsic;
 
 /** \brief Severity of the librealsense logger */
 typedef enum rs2_log_severity {
@@ -111,37 +97,9 @@ typedef enum rs2_extension
     RS2_EXTENSION_PLAYBACK,
     RS2_EXTENSION_DEPTH_STEREO_SENSOR,
     RS2_EXTENSION_DISPARITY_FRAME,
-    RS2_EXTENSION_MOTION_PROFILE,
-    RS2_EXTENSION_POSE_FRAME,
-    RS2_EXTENSION_POSE_PROFILE,
-    RS2_EXTENSION_TM2,
-    RS2_EXTENSION_SOFTWARE_DEVICE,
-    RS2_EXTENSION_SOFTWARE_SENSOR,
     RS2_EXTENSION_COUNT
 } rs2_extension;
 const char* rs2_extension_type_to_string(rs2_extension type);
-const char* rs2_extension_to_string(rs2_extension type);
-
-/** \brief Specifies types of different matchers */
-typedef enum rs2_matchers
-{
-   RS2_MATCHER_DI,      //compare depth and ir based on frame number
-
-   RS2_MATCHER_DI_C,    //compare depth and ir based on frame number, 
-                        //compare the pair of corresponding depth and ir with color based on closest timestamp, 
-                        //commonlly used by SR300
-
-   RS2_MATCHER_DLR_C,   //compare depth, left and right ir based on frame number, 
-                        //compare the set of corresponding depth, left and right with color based on closest timestamp, 
-                        //commonlly used by RS415, RS435
-
-   RS2_MATCHER_DLR,     //compare depth, left and right ir based on frame number, 
-                        //commonlly used by RS400, RS405, RS410, RS420, RS430
-
-   RS2_MATCHER_DEFAULT, //the default matcher compare all the streams based on closest timestamp 
-
-   RS2_MATCHER_COUNT
-}rs2_matchers;
 
 typedef struct rs2_device_info rs2_device_info;
 typedef struct rs2_device rs2_device;

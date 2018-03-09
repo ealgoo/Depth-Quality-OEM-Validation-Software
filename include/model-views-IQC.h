@@ -634,10 +634,10 @@ namespace rs2
 
 		rs2::frame apply_filters(rs2::frame f) {
 			//f = decimationFilter.proccess(f);//will reduce the resolution by filter with kernel.
-			f = depth_2_disparity->proccess(f);
-			f = spatialFilter->proccess(f);
-			f = temporalFilter->proccess(f);
-			f = disparity_2_depth->proccess(f);
+			f = depth_2_disparity->process(f);
+			f = spatialFilter->process(f);
+			f = temporalFilter->process(f);
+			f = disparity_2_depth->process(f);
 			return f;
 		}
 
