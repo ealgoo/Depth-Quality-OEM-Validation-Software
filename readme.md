@@ -6,7 +6,7 @@
 * If you want to build the related dlls & libs by self, please modify the CMakeLists.txt.
 
 ## Build Environment
-* LibRS 2.9.0 - Windows has pre-built dll inside while under linux, requires to build from source code.
+* LibRS 2.11.0 - Windows has pre-built dll inside while under linux, requires to build from source code.
 * Windows RS2
 * VisualStudio v14 2015, libraries built with v14, other than v14, please build from source code as needed.
 	- For pre-built dlls and libs, please download them from release page and paste to the root directory.

@@ -47,7 +47,7 @@ using namespace nlohmann;
 #define TIME_TO_CAPTURE 3
 #define TESTING_TIME	6
 #define MAJOR_VERSION 1
-#define MINOR_VERSION 6
+#define MINOR_VERSION 7
 #define PATCH_VERSION 0
 
 bool gStartCapture = false, gStartTesting = false, gJoinTrigger = false;
@@ -496,7 +496,8 @@ void calDepthResult(const std::vector<rs2::float3>& points, rs2::plane p, float 
 		// Store distance, disparity and gt- error
 		distances.push_back(dist2plane * TO_MM);
 		disparities.push_back(bf_factor / point.length() - bf_factor / plane_intersect.length());
-		gt_errors.push_back(plane_fit_to_ground_truth_mm - (dist2plane * TO_MM));
+		//gt_errors.push_back(plane_fit_to_ground_truth_mm - (dist2plane * TO_MM));
+		gt_errors.push_back(plane_fit_to_ground_truth_mm + (dist2plane * TO_MM));
 	}
 
 	// Show Z accuracy metric only when Ground Truth is available
@@ -602,18 +603,23 @@ snapshot_metrics analyze_depth_image(const uint16_t* data, int w, int h, float u
         calPlane(data, w, h, units, intrin, corners, result._angles, roi_pixels, p);
 
 	// Calculate intersection point of the camera's optical axis with the plane fit in camera's CS
-	float3 plane_fit_pivot = approximate_intersection(*p, intrin, intrin->ppx, intrin->ppy);
+	//float3 plane_fit_pivot = approximate_intersection(*p, intrin, intrin->ppx, intrin->ppy);
+	float3 plane_fit_pivot = approximate_intersection(*p, intrin, intrin->width / 2.f, intrin->height / 2.f);
 	// Find the distance between the "rectified" fit and the ground truth planes.
-	float plane_fit_to_gt_dist_mm = (gConfig.distance > 0.f) ? (plane_fit_pivot.z * 1000 - gConfig.distance) : 0;
+	//float plane_fit_to_gt_dist_mm = (gConfig.distance > 0.f) ? (plane_fit_pivot.z * 1000 - gConfig.distance) : 0;
+	float plane_fit_to_gt_offset_mm = (gConfig.distance > 0.f) ? (plane_fit_pivot.z * 1000 - gConfig.distance) : 0;
 
 	//result.data = calRMS(*roi_pixels, *p, baseline_mm, intrin->fx, plane_fit_to_gt_dist_mm, result.data);
-	calDepthResult(*roi_pixels, *p, baseline_mm, intrin->fx, plane_fit_to_gt_dist_mm, result.data);
+	//calDepthResult(*roi_pixels, *p, baseline_mm, intrin->fx, plane_fit_to_gt_offset_mm, result.data);
 
 	result.p = *p;
 	result.plane_corners = *corners;
 
 	// Distance of origin (the camera) from the plane is encoded in parameter D of the plane
 	result.distance = static_cast<float>(-p->d * 1000);
+
+	//result.data = calRMS(*roi_pixels, *p, baseline_mm, intrin->fx, plane_fit_to_gt_dist_mm, result.data);
+	calDepthResult(*roi_pixels, *p, baseline_mm, intrin->fx, plane_fit_to_gt_offset_mm, result.data);
 
 	delete p, roi_pixels, corners;
 	return result;
