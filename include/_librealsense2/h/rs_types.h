@@ -15,13 +15,12 @@ extern "C" {
 
 /** \brief Category of the librealsense notifications */
 typedef enum rs2_notification_category{
-    RS2_NOTIFICATION_CATEGORY_FRAMES_TIMEOUT,               /**< Frames didn't arrived within 5 seconds */
-    RS2_NOTIFICATION_CATEGORY_FRAME_CORRUPTED,              /**< Received partial/incomplete frame */
-    RS2_NOTIFICATION_CATEGORY_HARDWARE_ERROR,               /**< Error reported from the device */
-    RS2_NOTIFICATION_CATEGORY_HARDWARE_EVENT,               /**< General Hardeware notification that is not an error */
-    RS2_NOTIFICATION_CATEGORY_UNKNOWN_ERROR,                /**< Received unknown error from the device */
-    RS2_NOTIFICATION_CATEGORY_FIRMWARE_UPDATE_RECOMMENDED,  /**< Current firmware version installed is not the latest available */
-    RS2_NOTIFICATION_CATEGORY_COUNT                         /**< Number of enumeration values. Not a valid input: intended to be used in for-loops. */
+    RS2_NOTIFICATION_CATEGORY_FRAMES_TIMEOUT,   /**< Frames didn't arrived within 5 seconds */
+    RS2_NOTIFICATION_CATEGORY_FRAME_CORRUPTED,  /**< Received partial/incomplete frame */
+    RS2_NOTIFICATION_CATEGORY_HARDWARE_ERROR,   /**< Error reported from the device */
+    RS2_NOTIFICATION_CATEGORY_HARDWARE_EVENT,   /**< General Hardeware notification that is not an error */
+    RS2_NOTIFICATION_CATEGORY_UNKNOWN_ERROR,    /**< Received unknown error from the device */
+    RS2_NOTIFICATION_CATEGORY_COUNT             /**< Number of enumeration values. Not a valid input: intended to be used in for-loops. */
 } rs2_notification_category;
 const char* rs2_notification_category_to_string(rs2_notification_category category);
 
@@ -61,8 +60,8 @@ typedef struct rs2_intrinsics
     float         ppy;       /**< Vertical coordinate of the principal point of the image, as a pixel offset from the top edge */
     float         fx;        /**< Focal length of the image plane, as a multiple of pixel width */
     float         fy;        /**< Focal length of the image plane, as a multiple of pixel height */
-    rs2_distortion model;    /**< Distortion model of the image */
-    float         coeffs[5]; /**< Distortion coefficients, order: k1, k2, p1, p2, k3 */
+    rs2_distortion model;     /**< Distortion model of the image */
+    float         coeffs[5]; /**< Distortion coefficients */
 } rs2_intrinsics;
 
 /** \brief Motion device intrinsics: scale, bias, and variances */
@@ -128,18 +127,18 @@ typedef enum rs2_matchers
 {
    RS2_MATCHER_DI,      //compare depth and ir based on frame number
 
-   RS2_MATCHER_DI_C,    //compare depth and ir based on frame number,
-                        //compare the pair of corresponding depth and ir with color based on closest timestamp,
+   RS2_MATCHER_DI_C,    //compare depth and ir based on frame number, 
+                        //compare the pair of corresponding depth and ir with color based on closest timestamp, 
                         //commonlly used by SR300
 
-   RS2_MATCHER_DLR_C,   //compare depth, left and right ir based on frame number,
-                        //compare the set of corresponding depth, left and right with color based on closest timestamp,
+   RS2_MATCHER_DLR_C,   //compare depth, left and right ir based on frame number, 
+                        //compare the set of corresponding depth, left and right with color based on closest timestamp, 
                         //commonlly used by RS415, RS435
 
-   RS2_MATCHER_DLR,     //compare depth, left and right ir based on frame number,
+   RS2_MATCHER_DLR,     //compare depth, left and right ir based on frame number, 
                         //commonlly used by RS400, RS405, RS410, RS420, RS430
 
-   RS2_MATCHER_DEFAULT, //the default matcher compare all the streams based on closest timestamp
+   RS2_MATCHER_DEFAULT, //the default matcher compare all the streams based on closest timestamp 
 
    RS2_MATCHER_COUNT
 }rs2_matchers;
@@ -175,7 +174,7 @@ typedef struct rs2_notifications_callback rs2_notifications_callback;
 typedef void (*rs2_notification_callback_ptr)(rs2_notification*, void*);
 typedef void (*rs2_devices_changed_callback_ptr)(rs2_device_list*, rs2_device_list*, void*);
 typedef void (*rs2_frame_callback_ptr)(rs2_frame*, void*);
-typedef void (*rs2_frame_processor_callback_ptr)(rs2_frame*, rs2_source*, void*);
+typedef void (*rs2_frame_processor_callback_ptr)(rs2_frame**, int, rs2_source*, void*);
 
 typedef double      rs2_time_t;     /**< Timestamp format. units are milliseconds */
 typedef long long   rs2_metadata_type; /**< Metadata attribute type is defined as 64 bit signed integer*/
