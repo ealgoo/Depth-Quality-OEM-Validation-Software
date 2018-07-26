@@ -9,6 +9,6 @@
 		"ROIPercentage": 80,
 		"MaxAngle": 5,
 		"StartCpatureIndex": 100,
-		"EndCaptureIndex": 115,
+		"EndCaptureIndex": 115
 	}
 }
